@@ -8,7 +8,12 @@ Module for placing bets and executing actions in a poker game.
 import logging
 import time
 import pyautogui
+import cv2
+import numpy as np
+import os
+import random  # Added proper random module import
 from decision_maker import Decision
+from screen_capture import ScreenCapture
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +50,35 @@ class BetPlacer:
         # Safety timeout before all actions
         self.safety_timeout = self.config.get('safety_timeout', 1.0)
         
+        # Resource path for button templates
+        self.resources_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'resources')
+        
+        # Client templates for button detection
+        self.client_templates = {}
+        
+        # Load client templates
+        self._load_client_templates()
+        
         logger.info("Bet placer initialized")
+    
+    def _load_client_templates(self):
+        """Load client templates for button detection."""
+        try:
+            # Load client reference images
+            for i in range(1, 6):
+                client_path = os.path.join(self.resources_path, f'client{i}.png' if i > 1 else 'client.png')
+                if os.path.exists(client_path):
+                    client_img = cv2.imread(client_path, cv2.IMREAD_COLOR)
+                    if client_img is not None:
+                        self.client_templates[f'client{i}'] = client_img
+                        logger.info(f"Loaded client template {i} for button detection")
+                    else:
+                        logger.warning(f"Failed to load client template {client_path}")
+                        
+            if not self.client_templates:
+                logger.warning("No client templates were loaded for button detection")
+        except Exception as e:
+            logger.exception(f"Error loading client templates: {e}")
     
     def execute_action(self, decision: Decision) -> bool:
         """
@@ -108,8 +141,8 @@ class BetPlacer:
             
             # Add some randomization to avoid detection
             if self.randomize_movement:
-                x += pyautogui.random.uniform(-5, 5)
-                y += pyautogui.random.uniform(-3, 3)
+                x += random.uniform(-5, 5)  # Using standard random module
+                y += random.uniform(-3, 3)  # Using standard random module
                 
             # Move mouse to location
             pyautogui.moveTo(x, y, duration=0.3)
@@ -151,8 +184,8 @@ class BetPlacer:
             
             # Add some randomization to avoid detection
             if self.randomize_movement:
-                x += pyautogui.random.uniform(-3, 3)
-                y += pyautogui.random.uniform(-2, 2)
+                x += random.uniform(-3, 3)  # Using standard random module
+                y += random.uniform(-2, 2)  # Using standard random module
                 
             # Click the input field
             pyautogui.moveTo(x, y, duration=0.3)
@@ -243,17 +276,156 @@ class BetPlacer:
         except Exception as e:
             logger.exception(f"Error placing raise: {e}")
             return False
-            
+
     def calibrate_button_locations(self):
         """
-        Calibrate button locations interactively. This would prompt the user
-        to click on each button in the poker client to learn their locations.
-        
-        Note: This is a placeholder for a real implementation.
+        Calibrate button locations interactively or automatically using template matching.
         """
-        logger.info("Button calibration would happen here")
-        # In a real implementation, you would:
-        # 1. Display instructions to the user
-        # 2. Wait for the user to press a key when ready
-        # 3. Record mouse positions when the user clicks on each button
-        # 4. Save these positions to config
+        logger.info("Starting button calibration")
+        
+        # First check if we can detect buttons automatically using template matching
+        if self._try_automatic_calibration():
+            logger.info("Automatic button calibration successful")
+            return True
+            
+        # If automatic calibration fails, fallback to interactive calibration
+        return self._interactive_calibration()
+    
+    def _try_automatic_calibration(self) -> bool:
+        """
+        Try to automatically detect button locations using template matching.
+        
+        Returns:
+            bool: True if calibration was successful, False otherwise
+        """
+        try:
+            if not self.client_templates:
+                logger.warning("No client templates available for automatic calibration")
+                return False
+                
+            logger.info("Attempting automatic button calibration")
+            
+            # Take a screenshot of the current screen
+            screen_capture = ScreenCapture()
+            screenshot = screen_capture.capture()
+            if screenshot is None:
+                logger.error("Failed to capture screenshot for calibration")
+                return False
+                
+            # Try to identify which client we're using
+            client_match = None
+            client_match_score = 0
+            client_match_loc = None
+            
+            for client_name, template in self.client_templates.items():
+                try:
+                    # Use template matching to find the client
+                    result = cv2.matchTemplate(screenshot, template, cv2.TM_CCOEFF_NORMED)
+                    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+                    
+                    if max_val > client_match_score and max_val >= 0.7:
+                        client_match = client_name
+                        client_match_score = max_val
+                        client_match_loc = max_loc
+                        client_template = template
+                        
+                except Exception as e:
+                    logger.exception(f"Error matching client template {client_name}: {e}")
+            
+            if client_match is None:
+                logger.warning("Could not match any client template")
+                return False
+                
+            logger.info(f"Detected client: {client_match} (score: {client_match_score:.2f})")
+            
+            # Based on the detected client, we can compute the relative positions of buttons
+            # This would require calibration data for each client
+            # For example, if we know that the fold button is 100px below and 50px to the left of the top-left corner
+            # of the client template, we can compute its absolute position
+            
+            # This is a simplified example and should be customized based on the actual client UI
+            client_x, client_y = client_match_loc
+            
+            # These offsets would need to be determined for each client template
+            # For demonstration, we'll use placeholder values
+            if client_match == 'client1':
+                self.button_locations = {
+                    'fold': (client_x + 100, client_y + 300),
+                    'check': (client_x + 200, client_y + 300),
+                    'call': (client_x + 200, client_y + 300),  # Same as check in many clients
+                    'bet': (client_x + 300, client_y + 300),
+                    'raise': (client_x + 300, client_y + 300),  # Same as bet in many clients
+                    'bet_input': (client_x + 250, client_y + 250),
+                    'confirm': (client_x + 350, client_y + 350)
+                }
+            elif client_match == 'client2':
+                # Different offsets for client2
+                self.button_locations = {
+                    'fold': (client_x + 120, client_y + 320),
+                    'check': (client_x + 220, client_y + 320),
+                    'call': (client_x + 220, client_y + 320),
+                    'bet': (client_x + 320, client_y + 320),
+                    'raise': (client_x + 320, client_y + 320),
+                    'bet_input': (client_x + 270, client_y + 270),
+                    'confirm': (client_x + 370, client_y + 370)
+                }
+            # Add more client-specific offsets here
+            
+            # For now, log the calibrated positions
+            for button, position in self.button_locations.items():
+                logger.info(f"Calibrated {button} button at {position}")
+                
+            return True
+            
+        except Exception as e:
+            logger.exception(f"Error during automatic calibration: {e}")
+            return False
+    
+    def _interactive_calibration(self) -> bool:
+        """
+        Interactively calibrate button locations by asking the user to click on each button.
+        
+        Returns:
+            bool: True if calibration was successful, False otherwise
+        """
+        try:
+            logger.info("Starting interactive button calibration")
+            print("\n=== POKER BOT CALIBRATION ===")
+            print("Please follow the instructions to calibrate the poker bot.")
+            print("You'll need to click on each button when prompted.")
+            
+            # For each button type
+            for button in ['fold', 'check/call', 'bet/raise', 'bet_input', 'confirm']:
+                print(f"\nMove your mouse to the {button} button and press Enter...")
+                input()  # Wait for user to press Enter
+                
+                # Get current mouse position
+                x, y = pyautogui.position()
+                
+                if button == 'check/call':
+                    self.button_locations['check'] = (x, y)
+                    self.button_locations['call'] = (x, y)
+                    logger.info(f"Set check and call button at ({x}, {y})")
+                elif button == 'bet/raise':
+                    self.button_locations['bet'] = (x, y)
+                    self.button_locations['raise'] = (x, y)
+                    logger.info(f"Set bet and raise button at ({x}, {y})")
+                else:
+                    self.button_locations[button] = (x, y)
+                    logger.info(f"Set {button} button at ({x}, {y})")
+                
+                print(f"{button} button position recorded: ({x}, {y})")
+            
+            print("\nCalibration complete!")
+            
+            # Save the calibration data to the configuration
+            self.config['button_locations'] = self.button_locations
+            
+            # In a real implementation, you would also save this to a configuration file
+            # But for simplicity, we'll just keep it in memory for now
+            
+            return True
+            
+        except Exception as e:
+            logger.exception(f"Error during interactive calibration: {e}")
+            return False

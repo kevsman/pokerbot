@@ -1,0 +1,254 @@
+2025-04-30 19:46:43,936 - screen_capture - INFO - Screen capture initialized
+2025-04-30 19:46:43,978 - game_state - INFO - Loaded client template 1 from resources
+2025-04-30 19:46:44,023 - game_state - INFO - Loaded client template 2 from resources
+2025-04-30 19:46:44,072 - game_state - INFO - Loaded client template 3 from resources
+2025-04-30 19:46:44,122 - game_state - INFO - Loaded client template 4 from resources
+2025-04-30 19:46:44,173 - game_state - INFO - Loaded client template 5 from resources
+2025-04-30 19:46:44,173 - game_state - INFO - Loaded 5 client templates
+2025-04-30 19:46:44,173 - game_state - INFO - Template client1 size: 1536x960
+2025-04-30 19:46:44,180 - game_state - INFO - Template client2 size: 1536x960
+2025-04-30 19:46:44,181 - game_state - INFO - Template client3 size: 1536x960
+2025-04-30 19:46:44,181 - game_state - INFO - Template client4 size: 1536x960
+2025-04-30 19:46:44,182 - game_state - INFO - Template client5 size: 1536x960
+2025-04-30 19:46:44,182 - game_state - INFO - Game state detector initialized
+2025-04-30 19:46:44,183 - game_state - INFO - Window title detection is enabled
+2025-04-30 19:46:44,183 - hand_analyzer - INFO - Hand analyzer initialized
+2025-04-30 19:46:44,183 - decision_maker - INFO - Decision maker initialized (aggression: 0.50, bluff frequency: 0.10)
+2025-04-30 19:46:44,227 - bet_placer - INFO - Loaded client template 1 for button detection
+2025-04-30 19:46:44,274 - bet_placer - INFO - Loaded client template 2 for button detection
+2025-04-30 19:46:44,320 - bet_placer - INFO - Loaded client template 3 for button detection
+2025-04-30 19:46:44,369 - bet_placer - INFO - Loaded client template 4 for button detection
+2025-04-30 19:46:44,429 - bet_placer - INFO - Loaded client template 5 for button detection
+2025-04-30 19:46:44,430 - bet_placer - INFO - Bet placer initialized
+2025-04-30 19:46:44,431 - __main__ - INFO - Poker Bot initialized
+2025-04-30 19:46:44,432 - __main__ - INFO - Starting poker bot calibration
+2025-04-30 19:46:44,434 - bet_placer - INFO - Starting button calibration
+2025-04-30 19:46:44,435 - bet_placer - INFO - Attempting automatic button calibration
+2025-04-30 19:46:44,435 - screen_capture - INFO - Screen capture initialized
+2025-04-30 19:46:45,708 - bet_placer - WARNING - Could not match any client template
+2025-04-30 19:46:45,709 - bet_placer - INFO - Starting interactive button calibration
+2025-04-30 19:48:32,747 - bet_placer - INFO - Set fold button at (2173, 830)
+2025-04-30 19:48:38,602 - bet_placer - INFO - Set check and call button at (2319, 825)
+2025-04-30 19:48:40,239 - bet_placer - INFO - Set bet and raise button at (2447, 830)
+2025-04-30 19:48:41,075 - bet_placer - INFO - Set bet_input button at (2237, 780)
+2025-04-30 19:48:43,340 - bet_placer - INFO - Set confirm button at (2301, 779)
+2025-04-30 19:48:43,341 - __main__ - INFO - Poker Bot started
+2025-04-30 19:48:43,467 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:48:43,470 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:48:43,471 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:48:43,471 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:48:43,471 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:48:43,472 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:48:43,472 - bet_placer - INFO - Executing action: check
+2025-04-30 19:48:44,473 - bet_placer - ERROR - Error clicking check button: module 'pyautogui' has no attribute 'random'
+Traceback (most recent call last):
+  File "C:\GitRepositories\poker\src\bet_placer.py", line 143, in _click_button
+    x += pyautogui.random.uniform(-5, 5)
+         ^^^^^^^^^^^^^^^^
+AttributeError: module 'pyautogui' has no attribute 'random'
+2025-04-30 19:48:46,117 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:48:46,119 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:48:46,119 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:48:46,119 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:48:46,120 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:48:46,120 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:48:46,120 - bet_placer - INFO - Executing action: check
+2025-04-30 19:48:47,121 - bet_placer - ERROR - Error clicking check button: module 'pyautogui' has no attribute 'random'
+Traceback (most recent call last):
+  File "C:\GitRepositories\poker\src\bet_placer.py", line 143, in _click_button
+    x += pyautogui.random.uniform(-5, 5)
+         ^^^^^^^^^^^^^^^^
+AttributeError: module 'pyautogui' has no attribute 'random'
+2025-04-30 19:48:48,731 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:48:48,733 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:48:48,733 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:48:48,734 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:48:48,734 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:48:48,734 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:48:48,734 - bet_placer - INFO - Executing action: check
+2025-04-30 19:48:49,735 - bet_placer - ERROR - Error clicking check button: module 'pyautogui' has no attribute 'random'
+Traceback (most recent call last):
+  File "C:\GitRepositories\poker\src\bet_placer.py", line 143, in _click_button
+    x += pyautogui.random.uniform(-5, 5)
+         ^^^^^^^^^^^^^^^^
+AttributeError: module 'pyautogui' has no attribute 'random'
+2025-04-30 19:48:51,363 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:48:51,366 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:48:51,367 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:48:51,367 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:48:51,368 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:48:51,368 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:48:51,369 - bet_placer - INFO - Executing action: check
+2025-04-30 19:48:52,369 - bet_placer - ERROR - Error clicking check button: module 'pyautogui' has no attribute 'random'
+Traceback (most recent call last):
+  File "C:\GitRepositories\poker\src\bet_placer.py", line 143, in _click_button
+    x += pyautogui.random.uniform(-5, 5)
+         ^^^^^^^^^^^^^^^^
+AttributeError: module 'pyautogui' has no attribute 'random'
+2025-04-30 19:48:53,091 - __main__ - INFO - Poker Bot stopped by user
+2025-04-30 19:48:53,091 - __main__ - INFO - Poker Bot stopped
+2025-04-30 19:52:35,915 - screen_capture - INFO - Screen capture initialized
+2025-04-30 19:52:35,960 - game_state - INFO - Loaded client template 1 from resources
+2025-04-30 19:52:36,009 - game_state - INFO - Loaded client template 2 from resources
+2025-04-30 19:52:36,055 - game_state - INFO - Loaded client template 3 from resources
+2025-04-30 19:52:36,106 - game_state - INFO - Loaded client template 4 from resources
+2025-04-30 19:52:36,152 - game_state - INFO - Loaded client template 5 from resources
+2025-04-30 19:52:36,153 - game_state - INFO - Loaded 5 client templates
+2025-04-30 19:52:36,154 - game_state - INFO - Template client1 size: 1536x960
+2025-04-30 19:52:36,154 - game_state - INFO - Template client2 size: 1536x960
+2025-04-30 19:52:36,154 - game_state - INFO - Template client3 size: 1536x960
+2025-04-30 19:52:36,154 - game_state - INFO - Template client4 size: 1536x960
+2025-04-30 19:52:36,155 - game_state - INFO - Template client5 size: 1536x960
+2025-04-30 19:52:36,155 - game_state - INFO - Game state detector initialized
+2025-04-30 19:52:36,155 - game_state - INFO - Window title detection is enabled
+2025-04-30 19:52:36,156 - hand_analyzer - INFO - Hand analyzer initialized
+2025-04-30 19:52:36,156 - decision_maker - INFO - Decision maker initialized (aggression: 0.50, bluff frequency: 0.10)
+2025-04-30 19:52:36,203 - bet_placer - INFO - Loaded client template 1 for button detection
+2025-04-30 19:52:36,250 - bet_placer - INFO - Loaded client template 2 for button detection
+2025-04-30 19:52:36,295 - bet_placer - INFO - Loaded client template 3 for button detection
+2025-04-30 19:52:36,341 - bet_placer - INFO - Loaded client template 4 for button detection
+2025-04-30 19:52:36,386 - bet_placer - INFO - Loaded client template 5 for button detection
+2025-04-30 19:52:36,386 - bet_placer - INFO - Bet placer initialized
+2025-04-30 19:52:36,387 - __main__ - INFO - Poker Bot initialized
+2025-04-30 19:52:36,387 - __main__ - INFO - Starting poker bot calibration
+2025-04-30 19:52:36,389 - bet_placer - INFO - Starting button calibration
+2025-04-30 19:52:36,389 - bet_placer - INFO - Attempting automatic button calibration
+2025-04-30 19:52:36,389 - screen_capture - INFO - Screen capture initialized
+2025-04-30 19:52:37,885 - bet_placer - WARNING - Could not match any client template
+2025-04-30 19:52:37,887 - bet_placer - INFO - Starting interactive button calibration
+2025-04-30 19:52:57,602 - bet_placer - INFO - Set fold button at (2153, 815)
+2025-04-30 19:52:58,614 - bet_placer - INFO - Set check and call button at (2276, 827)
+2025-04-30 19:52:59,398 - bet_placer - INFO - Set bet and raise button at (2327, 820)
+2025-04-30 19:53:01,070 - bet_placer - INFO - Set bet_input button at (2099, 768)
+2025-04-30 19:53:01,900 - bet_placer - INFO - Set confirm button at (2184, 769)
+2025-04-30 19:53:01,901 - __main__ - INFO - Poker Bot started
+2025-04-30 19:53:02,004 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:02,007 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:02,008 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:02,008 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:02,009 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:02,009 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:02,009 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:03,693 - bet_placer - INFO - Clicked check button at (2276.8669302820585, 829.917221555052)
+2025-04-30 19:53:05,789 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:05,792 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:05,793 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:05,793 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:05,793 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:05,793 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:05,794 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:07,474 - bet_placer - INFO - Clicked check button at (2278.1341514935925, 825.8558238129003)
+2025-04-30 19:53:09,600 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:09,603 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:09,603 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:09,603 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:09,604 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:09,604 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:09,604 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:11,294 - bet_placer - INFO - Clicked check button at (2278.9516453026927, 825.2245247231193)
+2025-04-30 19:53:13,429 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:13,432 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:13,433 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:13,433 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:13,433 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:13,434 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:13,434 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:15,107 - bet_placer - INFO - Clicked check button at (2273.719131336649, 826.6538000719437)
+2025-04-30 19:53:17,230 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:17,232 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:17,233 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:17,233 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:17,233 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:17,234 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:17,234 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:18,909 - bet_placer - INFO - Clicked check button at (2280.0010964472553, 824.0775234702871)
+2025-04-30 19:53:21,022 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:21,024 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:21,025 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:21,025 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:21,025 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:21,025 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:21,026 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:22,693 - bet_placer - INFO - Clicked check button at (2276.7167939035994, 829.6965285343059)
+2025-04-30 19:53:24,832 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:24,834 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:24,834 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:24,835 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:24,835 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:24,835 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:24,836 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:26,502 - bet_placer - INFO - Clicked check button at (2279.2836110423036, 828.3187017778544)
+2025-04-30 19:53:28,633 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:28,635 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:28,635 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:28,636 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:28,636 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:28,636 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:28,636 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:30,302 - bet_placer - INFO - Clicked check button at (2280.400084275085, 828.6949242339376)
+2025-04-30 19:53:32,405 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:32,407 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:32,408 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:32,408 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:32,409 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:32,409 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:32,409 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:34,076 - bet_placer - INFO - Clicked check button at (2279.203580692024, 825.1684392477905)
+2025-04-30 19:53:36,208 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:36,210 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:36,211 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:36,211 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:36,211 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:36,212 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:36,212 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:37,894 - bet_placer - INFO - Clicked check button at (2272.4143342231946, 827.4900212980265)
+2025-04-30 19:53:40,032 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:40,034 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:40,034 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:40,034 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:40,035 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:40,035 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:40,035 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:41,701 - bet_placer - INFO - Clicked check button at (2271.5227554356043, 825.4768984192539)
+2025-04-30 19:53:43,837 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:43,839 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:43,839 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:43,840 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:43,840 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:43,841 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:43,841 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:45,510 - bet_placer - INFO - Clicked check button at (2280.3646159345813, 827.9087357930913)
+2025-04-30 19:53:47,631 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:47,633 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:47,634 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:47,634 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:47,634 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:47,634 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:47,634 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:49,309 - bet_placer - INFO - Clicked check button at (2272.211802267536, 826.5274253944717)
+2025-04-30 19:53:51,427 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:51,429 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:51,429 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:51,430 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:51,430 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:51,430 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:51,430 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:53,098 - bet_placer - INFO - Clicked check button at (2280.831319271981, 828.906331718641)
+2025-04-30 19:53:55,243 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:55,246 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:55,246 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:55,247 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:55,247 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:55,247 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:55,248 - bet_placer - INFO - Executing action: check
+2025-04-30 19:53:56,926 - bet_placer - INFO - Clicked check button at (2276.005784087513, 826.3424119354935)
+2025-04-30 19:53:59,043 - game_state - INFO - Screenshot size: 2560x1600
+2025-04-30 19:53:59,047 - game_state - INFO - Target window 'Poker' found and visible
+2025-04-30 19:53:59,047 - game_state - INFO - Poker window detected by window title
+2025-04-30 19:53:59,047 - game_state - INFO - Game state detected: 0 player cards, 0 community cards, pot: 0.0, is_our_turn: False
+2025-04-30 19:53:59,048 - hand_analyzer - WARNING - Cannot analyze hand: No player cards detected
+2025-04-30 19:53:59,048 - decision_maker - WARNING - Asked to make decision but it's not our turn
+2025-04-30 19:53:59,049 - bet_placer - INFO - Executing action: check
+2025-04-30 19:54:00,731 - bet_placer - INFO - Clicked check button at (2275.015305908023, 825.4016396739587)
+2025-04-30 19:54:02,292 - __main__ - INFO - Poker Bot stopped by user
+2025-04-30 19:54:02,292 - __main__ - INFO - Poker Bot stopped
