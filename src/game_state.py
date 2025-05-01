@@ -26,7 +26,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Configure pytesseract path - update this with your Tesseract installation path
-# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # List of possible poker client window titles
 POKER_CLIENT_TITLES = [
@@ -327,48 +327,1285 @@ class GameStateDetector:
         return False
         
     def _detect_player_cards(self, screenshot):
-        """Detect player's hole cards from the screenshot."""
-        # Placeholder - in a real implementation, you would use template matching or ML
-        return []
+        """
+        Detect player's hole cards from the screenshot using color and shape analysis.
         
-    def _detect_community_cards(self, screenshot):
-        """Detect community cards from the screenshot."""
-        # Placeholder - in a real implementation, you would use template matching or ML
-        return []
+        Args:
+            screenshot (numpy.ndarray): The screenshot to analyze.
+            
+        Returns:
+            List[Card]: List of detected cards.
+        """
+        cards = []
+        try:
+            # Common region for player cards (typically bottom center of the screen)
+            h, w = screenshot.shape[:2]
+            
+            # Define region of interest (ROI) where player cards are usually located
+            # These values need to be calibrated based on the specific poker client
+            roi_x = int(w * 0.3)  # Start at 40% from the left
+            roi_y = int(h * 0.6)  # Start at 60% from the top
+            roi_w = int(w * 0.2)  # Width is 20% of the screen width
+            roi_h = int(h * 0.10)  # Height is 15% of the screen height
+
+            # Add debugging info
+            logger.info(f"[CARD DEBUG] Screenshot size: {w}x{h}")
+            logger.info(f"[CARD DEBUG] Player card ROI: x={roi_x}, y={roi_y}, width={roi_w}, height={roi_h}")
+
+            # Create a debug image for visualization
+            debug_img = screenshot.copy()
+            
+            # Draw a rectangle around the ROI we're analyzing
+            cv2.rectangle(debug_img, (roi_x, roi_y), (roi_x + roi_w, roi_y + roi_h), (0, 255, 0), 2)
+            
+            # Draw crosshairs at the center of the ROI
+            center_x = roi_x + roi_w // 2
+            center_y = roi_y + roi_h // 2
+            cv2.line(debug_img, (center_x - 20, center_y), (center_x + 20, center_y), (0, 0, 255), 2)
+            cv2.line(debug_img, (center_x, center_y - 20), (center_x, center_y + 20), (0, 0, 255), 2)
+            
+            # Draw coordinate text
+            cv2.putText(debug_img, f"ROI: ({roi_x},{roi_y})", (roi_x, roi_y - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                        
+            # Extract the region of interest
+            roi = screenshot[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
+            
+            # Convert to HSV color space which is better for color detection
+            hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            
+            # Look for card-like shapes based on color thresholds
+            # White/gray areas for card backgrounds
+            lower_white = np.array([0, 0, 180])
+            upper_white = np.array([180, 30, 255])
+            mask_white = cv2.inRange(hsv_roi, lower_white, upper_white)
+            
+            # Find contours of potential cards
+            contours, _ = cv2.findContours(mask_white, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            logger.info(f"[CARD DEBUG] Found {len(contours)} potential card contours")
+            
+            # Filter contours to find card-like shapes
+            card_contours = 0
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                # Filter by area (cards should be reasonably sized)
+                min_card_area = (roi_w * roi_h) * 0.03  # Cards take at least 3% of ROI
+                max_card_area = (roi_w * roi_h) * 0.3   # Cards take at most 30% of ROI
+                
+                logger.info(f"[CARD DEBUG] Contour area: {area}, min: {min_card_area}, max: {max_card_area}")
+                
+                if min_card_area < area < max_card_area:
+                    # Get bounding rectangle for the contour
+                    x, y, w, h = cv2.boundingRect(contour)
+                    
+                    # Check if aspect ratio is card-like
+                    # UPDATED: Now accepts aspect ratios from 0.8 to 1.6 to include your client's cards (around 0.9)
+                    aspect_ratio = h / w
+                    logger.info(f"[CARD DEBUG] Contour aspect ratio: {aspect_ratio}")
+                    
+                    if 0.8 < aspect_ratio < 1.6:  # Widened range to include aspect ratios around 0.9
+                        card_contours += 1
+                        # Draw the contour in the debug image
+                        cv2.drawContours(debug_img, [np.array([[x+roi_x, y+roi_y], 
+                                                            [x+w+roi_x, y+roi_y],
+                                                            [x+w+roi_x, y+h+roi_y],
+                                                            [x+roi_x, y+h+roi_y]])], 0, (255, 0, 0), 2)
+                        
+                        # Add rectangle and text label
+                        cv2.rectangle(debug_img, (x+roi_x, y+roi_y), (x+w+roi_x, y+h+roi_y), (0, 255, 255), 2)
+                        cv2.putText(debug_img, f"Card #{card_contours}", (x+roi_x, y+roi_y-5), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                        
+                        # Extract the card image
+                        card_img = roi[y:y+h, x:x+w]
+                        
+                        # Get the rank and suit based on colors and patterns
+                        rank, suit = self._identify_card(card_img)
+                        
+                        if rank and suit:
+                            cards.append(Card(rank, suit))
+                            logger.info(f"[CARD DEBUG] Detected player card: {rank}{suit}")
+                            
+                            # Display the rank and suit on the debug image
+                            # Convert suit symbol to text representation for display
+                            suit_text = suit
+                            if suit == 'h': suit_text = "♥"  # hearts
+                            elif suit == 'd': suit_text = "♦"  # diamonds
+                            elif suit == 'c': suit_text = "♣"  # clubs
+                            elif suit == 's': suit_text = "♠"  # spades
+                            
+                            # Draw rank and suit text at a position below the card rectangle
+                            card_text = f"{rank}{suit_text}"
+                            text_x = x + roi_x + 5
+                            text_y = y + roi_y + h + 20  # Position below the card
+                            
+                            # Draw the card value with a bold, clearly visible font
+                            # First draw a black background for better visibility
+                            cv2.putText(debug_img, card_text, (text_x, text_y), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 4)
+                            
+                            # Then overlay the text with color based on suit
+                            if suit in ['h', 'd']:  # Red for hearts and diamonds
+                                cv2.putText(debug_img, card_text, (text_x, text_y), 
+                                          cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                            else:  # Black for clubs and spades
+                                cv2.putText(debug_img, card_text, (text_x, text_y), 
+                                          cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                        else:
+                            logger.info(f"[CARD DEBUG] Failed to identify card rank/suit")
+                            # Display that the card couldn't be identified
+                            cv2.putText(debug_img, "Unknown", (x+roi_x, y+roi_y+h+20), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
+            
+            logger.info(f"[CARD DEBUG] Total card-like contours found: {card_contours}")
+            
+            # Always save the debug image in this modified version
+            debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
+            os.makedirs(debug_dir, exist_ok=True)
+            debug_path = os.path.join(debug_dir, f'player_cards_debug_{int(time.time())}.png')
+            cv2.imwrite(debug_path, debug_img)
+            logger.info(f"[CARD DEBUG] Saved debug image to {debug_path}")
+                
+            # Also save the white mask for debugging
+            mask_path = os.path.join(debug_dir, f'player_cards_mask_{int(time.time())}.png')
+            cv2.imwrite(mask_path, mask_white)
+            logger.info(f"[CARD DEBUG] Saved card mask to {mask_path}")
+                    
+        except Exception as e:
+            logger.exception(f"Error detecting player cards: {e}")
+            
+        return cards
         
-    def _detect_pot_size(self, screenshot):
-        """Detect the current pot size from the screenshot using OCR."""
-        # Placeholder - in a real implementation, you would:
-        # 1. Crop the region where pot size is displayed
-        # 2. Preprocess the image for better OCR
-        # 3. Use pytesseract to extract text
-        # 4. Parse the text to get the pot size as a float
-        return 0.0
+    def _identify_card(self, card_img):
+        """
+        Identify the rank and suit of a card from its image using a more robust approach.
         
-    def _detect_current_bet(self, screenshot):
-        """Detect the current bet from the screenshot."""
-        # Placeholder implementation
-        return 0.0
+        Args:
+            card_img (numpy.ndarray): Image of a single card.
+            
+        Returns:
+            tuple: (rank, suit) of the card, or (None, None) if not identified.
+        """
+        try:
+            # Resize the card image for more consistent processing
+            h, w = card_img.shape[:2]
+            resized = cv2.resize(card_img, (100, int(100 * h/w)))
+            
+            # Extract the top-left corner where the rank and suit are usually displayed
+            # Increased corner_h from 40 to 50 to ensure we capture the full rank character
+            corner_h, corner_w = min(50, resized.shape[0]//2), min(30, resized.shape[1]//2)
+            corner = resized[0:corner_h, 0:corner_w]
+            
+            # Save corner image for debugging
+            if self.debug_mode:
+                debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
+                os.makedirs(debug_dir, exist_ok=True)
+                corner_path = os.path.join(debug_dir, f'card_corner_{int(time.time())}.png')
+                cv2.imwrite(corner_path, corner)
+                logger.info(f"[CARD DEBUG] Saved card corner image to {corner_path}")
+            
+            # Enhanced color analysis for suits
+            # Convert to multiple color spaces for better analysis
+            hsv_corner = cv2.cvtColor(corner, cv2.COLOR_BGR2HSV)
+            lab_corner = cv2.cvtColor(corner, cv2.COLOR_BGR2LAB)
+            
+            # Red detection (for hearts and diamonds) with improved thresholds
+            # In HSV, red is at both ends of the hue spectrum
+            lower_red1 = np.array([0, 100, 100])
+            upper_red1 = np.array([10, 255, 255])
+            lower_red2 = np.array([160, 100, 100]) 
+            upper_red2 = np.array([180, 255, 255])
+            
+            red_mask1 = cv2.inRange(hsv_corner, lower_red1, upper_red1)
+            red_mask2 = cv2.inRange(hsv_corner, lower_red2, upper_red2)
+            red_mask = cv2.bitwise_or(red_mask1, red_mask2)
+            
+            # Black detection (for clubs and spades) with improved thresholds
+            # In HSV, black has low V (value/brightness)
+            lower_black = np.array([0, 0, 0])
+            upper_black = np.array([180, 100, 70])
+            black_mask = cv2.inRange(hsv_corner, lower_black, upper_black)
+            
+            # Count red and black pixels
+            red_pixels = cv2.countNonZero(red_mask)
+            black_pixels = cv2.countNonZero(black_mask)
+            
+            # Save masks for debugging
+            if self.debug_mode:
+                cv2.imwrite(os.path.join(debug_dir, f'red_mask_{int(time.time())}.png'), red_mask)
+                cv2.imwrite(os.path.join(debug_dir, f'black_mask_{int(time.time())}.png'), black_mask)
+                logger.info(f"[CARD DEBUG] Red pixels: {red_pixels}, Black pixels: {black_pixels}")
+            
+            # Determine if card is red or black
+            is_red = red_pixels > black_pixels and red_pixels > 10
+            
+            # Enhanced OCR for rank detection
+            # Convert to grayscale with better contrast
+            gray = cv2.cvtColor(corner, cv2.COLOR_BGR2GRAY)
+            
+            # Apply adaptive threshold for better text extraction
+            thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                          cv2.THRESH_BINARY_INV, 11, 2)
+            
+            # Dilate to connect broken parts of characters
+            kernel = np.ones((2,2), np.uint8)
+            thresh = cv2.dilate(thresh, kernel, iterations=1)
+            
+            # Save thresholded image for debugging
+            if self.debug_mode:
+                cv2.imwrite(os.path.join(debug_dir, f'rank_thresh_{int(time.time())}.png'), thresh)
+            
+            # Use tesseract with specific configurations for card rank detection
+            # Use --psm 10 for single character recognition
+            rank_config = r'--psm 10 -c tessedit_char_whitelist=23456789TJQKA'
+            detected_text = pytesseract.image_to_string(thresh, config=rank_config).strip()
+            
+            # Improved mapping of OCR results to card ranks
+            rank_map = {
+                '2': '2', '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', 
+                '8': '8', '9': '9', '1': '10', 'T': '10', 'J': 'J', 
+                'Q': 'Q', 'K': 'K', 'A': 'A', 'l': '1', 'I': '1',
+                'O': '10', 'o': '10', '0': '10', 'L': 'J', 'Z': '2',
+                't': '10', 'i': '1', '!': '1', '[': 'J', ']': 'J'
+            }
+            
+            # Process OCR text for rank
+            rank = None
+            logger.info(f"[CARD DEBUG] Raw OCR text: '{detected_text}'")
+            
+            # Clean up OCR results
+            detected_text = ''.join(c for c in detected_text if c.isalnum())
+            
+            # If we found something like '10' directly
+            if detected_text in ['10', '1O', 'IO', 'To', 'T0']:
+                rank = '10'
+            else:
+                # Try to match the first character to a rank
+                if detected_text and detected_text[0] in rank_map:
+                    rank = rank_map[detected_text[0]]
+                
+                # Special case for 10
+                if detected_text and len(detected_text) > 1:
+                    if detected_text[:2] in ['10', '1O', 'IO', 'To', 'T0']:
+                        rank = '10'
+            
+            # If OCR failed, try an alternative approach with template matching or shape analysis
+            if not rank and corner_h > 10 and corner_w > 10:
+                # Focus on the very top-left where rank is typically located
+                rank_roi = corner[0:min(20, corner_h), 0:min(20, corner_w)]
+                # Check for characteristic shapes of specific ranks
+                # For example, "A" typically has a triangular shape at the top
+                if self._check_for_A_shape(rank_roi):
+                    rank = 'A'
+                # K typically has strong vertical lines
+                elif self._check_for_K_shape(rank_roi):
+                    rank = 'K'
+                # Q typically has a curved shape
+                elif self._check_for_Q_shape(rank_roi):
+                    rank = 'Q'
+                # J typically has a hook at the bottom
+                elif self._check_for_J_shape(rank_roi):
+                    rank = 'J'
+            
+            # Determine suit based on shape analysis, not just color
+            suit = None
+            
+            # For red cards (hearts and diamonds)
+            if is_red:
+                # Apply morphological operations to better detect shape features
+                kernel = np.ones((2,2), np.uint8)
+                red_processed = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel)
+                
+                # Find contours in the red parts
+                contours, _ = cv2.findContours(red_processed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                
+                if contours:
+                    # Heart detection: hearts typically have a "V" shape at the bottom
+                    heart_score = self._detect_heart_shape(contours, red_processed.shape)
+                    
+                    # Diamond detection: diamonds typically have sharp corners forming a rhombus
+                    diamond_score = self._detect_diamond_shape(contours, red_processed.shape)
+                    
+                    logger.info(f"[CARD DEBUG] Heart score: {heart_score}, Diamond score: {diamond_score}")
+                    
+                    # Determine suit based on which score is higher
+                    if heart_score > diamond_score:
+                        suit = 'h'
+                    else:
+                        suit = 'd'
+                else:
+                    # If contour analysis fails, default to diamond as it's more common in online poker
+                    suit = 'd'
+            else:
+                # For black cards (clubs and spades)
+                kernel = np.ones((2,2), np.uint8)
+                black_processed = cv2.morphologyEx(black_mask, cv2.MORPH_CLOSE, kernel)
+                
+                # Find contours
+                contours, _ = cv2.findContours(black_processed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                
+                if contours:
+                    # Spade detection: spades typically have a triangular shape at the top
+                    spade_score = self._detect_spade_shape(contours, black_processed.shape)
+                    
+                    # Club detection: clubs typically have three circular lobes
+                    club_score = self._detect_club_shape(contours, black_processed.shape)
+                    
+                    logger.info(f"[CARD DEBUG] Spade score: {spade_score}, Club score: {club_score}")
+                    
+                    # Determine suit based on which score is higher
+                    if spade_score > club_score:
+                        suit = 's'
+                    else:
+                        suit = 'c'
+                else:
+                    # If contour analysis fails, default to spade as it's more common
+                    suit = 's'
+            
+            # If we couldn't detect either rank or suit, return None
+            if not rank or not suit:
+                logger.info(f"[CARD DEBUG] Failed to identify card: rank={rank}, suit={suit}")
+                return None, None
+                
+            logger.info(f"[CARD DEBUG] Successfully identified card: {rank}{suit}, is_red={is_red}")
+            return rank, suit
+            
+        except Exception as e:
+            logger.exception(f"Error identifying card: {e}")
+            return None, None
+    
+    def _check_for_A_shape(self, img):
+        """Check for 'A' characteristic shape (a peak with diverging lines)"""
+        # Convert to binary
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, binary = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY_INV)
         
-    def _detect_player_stack(self, screenshot):
-        """Detect the player's chip stack from the screenshot."""
-        # Placeholder implementation
-        return 100.0
+        # Look for white pixels forming a triangular distribution
+        h, w = binary.shape
+        if h < 10 or w < 10:  # Too small to analyze
+            return False
+            
+        # Check for a concentration of white pixels in the upper middle 
+        # and diverging pattern toward bottom
+        upper_mid = binary[0:h//2, w//4:3*w//4]
+        upper_mid_pixels = cv2.countNonZero(upper_mid)
         
-    def _detect_position(self, screenshot):
-        """Detect the player's position (early, middle, late, blinds)."""
-        # Placeholder implementation
-        return "unknown"
+        bottom_left = binary[h//2:h, 0:w//2]
+        bottom_left_pixels = cv2.countNonZero(bottom_left)
         
-    def _detect_is_our_turn(self, screenshot):
-        """Check if it's currently our turn to act."""
-        # Placeholder implementation
+        bottom_right = binary[h//2:h, w//2:w]
+        bottom_right_pixels = cv2.countNonZero(bottom_right)
+        
+        # Characteristic of 'A': strong presence in upper middle and both bottom corners
+        if (upper_mid_pixels > 5 and
+            bottom_left_pixels > 5 and
+            bottom_right_pixels > 5):
+            return True
         return False
         
+    def _check_for_K_shape(self, img):
+        """Check for 'K' characteristic shape (vertical line with diagonal branches)"""
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, binary = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY_INV)
+        
+        h, w = binary.shape
+        if h < 10 or w < 10:
+            return False
+            
+        # 'K' typically has a strong vertical line on the left
+        left_col = binary[:, 0:w//4]
+        left_pixels = cv2.countNonZero(left_col)
+        
+        # And diagonal elements from middle to right
+        mid_right = binary[:, w//3:w]
+        mid_right_pixels = cv2.countNonZero(mid_right)
+        
+        # Characteristic of 'K': strong left vertical and diagonal components
+        if (left_pixels > h/2 and mid_right_pixels > 5):
+            return True
+        return False
+        
+    def _check_for_Q_shape(self, img):
+        """Check for 'Q' characteristic shape (circular with a tail)"""
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, binary = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY_INV)
+        
+        h, w = binary.shape
+        if h < 10 or w < 10:
+            return False
+            
+        # 'Q' typically has a circular pattern in the top
+        top = binary[0:3*h//4, :]
+        
+        # And a diagonal tail in the bottom right
+        bottom_right = binary[3*h//4:h, w//2:w]
+        bottom_right_pixels = cv2.countNonZero(bottom_right)
+        
+        # Check for circle-like contour
+        contours, _ = cv2.findContours(top, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        for cnt in contours:
+            # Check if contour is approximately circular
+            area = cv2.contourArea(cnt)
+            if area < 5:  # Ignore tiny contours
+                continue
+                
+            perimeter = cv2.arcLength(cnt, True)
+            circularity = 4 * np.pi * area / (perimeter * perimeter) if perimeter > 0 else 0
+            
+            # 'Q' shape: circular top and diagonal in bottom right
+            if circularity > 0.4 and bottom_right_pixels > 2:
+                return True
+                
+        return False
+        
+    def _check_for_J_shape(self, img):
+        """Check for 'J' characteristic shape (vertical with hook at bottom)"""
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, binary = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY_INV)
+        
+        h, w = binary.shape
+        if h < 10 or w < 10:
+            return False
+            
+        # 'J' typically has vertical component in the middle
+        middle_col = binary[:, w//4:3*w//4]
+        middle_pixels = cv2.countNonZero(middle_col)
+        
+        # And a hook at the bottom left
+        bottom_left = binary[3*h//4:h, 0:w//2]
+        bottom_left_pixels = cv2.countNonZero(bottom_left)
+        
+        # Characteristic of 'J': middle vertical and bottom left hook
+        if (middle_pixels > h/3 and bottom_left_pixels > 3):
+            return True
+        return False
+        
+    def _detect_heart_shape(self, contours, shape):
+        """Return a score indicating how heart-like the contours are"""
+        score = 0
+        h, w = shape
+        
+        # Heart characteristics: 
+        # 1. Two circular bumps at top
+        # 2. Pointed bottom
+        
+        for cnt in contours:
+            if len(cnt) < 5:
+                continue
+                
+            # Check for pointed bottom
+            bottom_y = np.max(cnt[:, :, 1])
+            bottom_points = cnt[cnt[:, :, 1] >= bottom_y - 2]
+            
+            # A pointed bottom will have relatively few points at the max y-coordinate
+            if len(bottom_points) < 5:
+                score += 5
+            
+            # Check for two bumps at top
+            hull = cv2.convexHull(cnt)
+            hull_area = cv2.contourArea(hull)
+            cnt_area = cv2.contourArea(cnt)
+            
+            # Hearts have concavities, so contour area is significantly less than hull area
+            if cnt_area > 0 and hull_area / cnt_area > 1.2:
+                score += 10
+                
+        return score
+        
+    def _detect_diamond_shape(self, contours, shape):
+        """Return a score indicating how diamond-like the contours are"""
+        score = 0
+        h, w = shape
+        
+        # Diamond characteristics: 
+        # 1. Four corners with similar angles
+        # 2. Symmetrical shape
+        # 3. Approximates a rhombus
+        
+        for cnt in contours:
+            if len(cnt) < 5:
+                continue
+                
+            # Check for polygon approximation with 4 points (square/diamond)
+            epsilon = 0.04 * cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, epsilon, True)
+            
+            if len(approx) == 4:
+                score += 15  # Strong indicator of diamond
+            
+            # Check if width/height ratio is close to 1 (diamond is typically symmetric)
+            x, y, w, h = cv2.boundingRect(cnt)
+            if 0.7 < w/h < 1.3:
+                score += 5
+                
+        return score
+        
+    def _detect_spade_shape(self, contours, shape):
+        """Return a score indicating how spade-like the contours are"""
+        score = 0
+        h, w = shape
+        
+        # Spade characteristics:
+        # 1. Triangular top
+        # 2. Small stem at bottom
+        
+        for cnt in contours:
+            if len(cnt) < 5:
+                continue
+                
+            # Get the topmost point
+            topmost = tuple(cnt[cnt[:, :, 1].argmin()][0])
+            
+            # Check for triangular top
+            top_half = cnt[cnt[:, :, 1] < h//2]
+            if len(top_half) >= 3:
+                # Try to fit a triangle to top half points
+                hull = cv2.convexHull(top_half)
+                epsilon = 0.04 * cv2.arcLength(hull, True)
+                approx = cv2.approxPolyDP(hull, epsilon, True)
+                
+                if len(approx) == 3:
+                    score += 10  # Strong indicator of spade
+                    
+            # Check for narrow stem at bottom
+            bottom_part = cnt[cnt[:, :, 1] > 2*h//3]
+            if len(bottom_part) > 0:
+                # We need to check the dimensionality of bottom_part first
+                try:
+                    # For 3D array structure (typical contour points format)
+                    if bottom_part.ndim == 3:
+                        x_coords = bottom_part[:, 0, 0]  # Extract first coordinate (x) from each point
+                        bottom_width = np.max(x_coords) - np.min(x_coords)
+                    # For 2D array structure 
+                    else:
+                        x_coords = [point[0] for point in bottom_part]  # Extract x coordinate from each point
+                        bottom_width = max(x_coords) - min(x_coords)
+                        
+                    if bottom_width < w//2:
+                        score += 5  # Narrow stem is typical for spades
+                except (IndexError, ValueError, AttributeError) as e:
+                    # If we can't process the coordinates, log and continue
+                    logger.debug(f"Could not process contour points: {e}")
+                    
+        return score
+        
+    def _detect_club_shape(self, contours, shape):
+        """Return a score indicating how club-like the contours are"""
+        score = 0
+        h, w = shape
+        
+        # Club characteristics:
+        # 1. Multiple circular lobes (typically 3)
+        # 2. Small stem at bottom
+        
+        # First, check if there are multiple distinct contours (club lobes)
+        if len(contours) >= 2:
+            score += 5
+            
+        for cnt in contours:
+            if len(cnt) < 5:
+                continue
+                
+            # Check if contour is approximately circular (club lobes are circular)
+            area = cv2.contourArea(cnt)
+            if area < 5:  # Ignore tiny contours
+                continue
+                
+            perimeter = cv2.arcLength(cnt, True)
+            circularity = 4 * np.pi * area / (perimeter * perimeter) if perimeter > 0 else 0
+            
+            if circularity > 0.6:
+                score += 10  # Strong indicator of club lobe
+                
+            # Check for small stem at bottom
+            bottom_part = cnt[cnt[:, :, 1] > 2*h//3]
+            if len(bottom_part) > 0:
+                # We need to check the dimensionality of bottom_part first
+                try:
+                    # For 3D array structure (typical contour points format)
+                    if bottom_part.ndim == 3:
+                        x_coords = bottom_part[:, 0, 0]  # Extract first coordinate (x) from each point
+                        bottom_width = np.max(x_coords) - np.min(x_coords)
+                    # For 2D array structure 
+                    else:
+                        x_coords = [point[0] for point in bottom_part]  # Extract x coordinate from each point
+                        bottom_width = max(x_coords) - min(x_coords)
+                        
+                    if bottom_width < w//3:
+                        score += 5  # Narrow stem is typical for clubs
+                except (IndexError, ValueError, AttributeError) as e:
+                    # If we can't process the coordinates, log and continue
+                    logger.debug(f"Could not process contour points: {e}")
+                    
+        return score
+        
+    def _detect_community_cards(self, screenshot):
+        """
+        Detect community cards on the table using color analysis and shape detection.
+        
+        Args:
+            screenshot (numpy.ndarray): The screenshot to analyze.
+            
+        Returns:
+            List[Card]: List of detected community cards.
+        """
+        cards = []
+        try:
+            # Common region for community cards (middle area of the screen)
+            h, w = screenshot.shape[:2]
+            
+            # Define region of interest (ROI) where community cards are typically located
+            roi_x = int(w * 0.3)  # Start at 30% from the left
+            roi_y = int(h * 0.4)  # Start at 40% from the top
+            roi_w = int(w * 0.4)  # Width is 40% of the screen width
+            roi_h = int(h * 0.15)  # Height is 15% of the screen height
+            
+            # Extract the region of interest
+            roi = screenshot[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
+            
+            # Convert to HSV color space for better color detection
+            hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            
+            # Define color range for white/gray card backgrounds
+            lower_white = np.array([0, 0, 180])
+            upper_white = np.array([180, 30, 255])
+            mask_white = cv2.inRange(hsv_roi, lower_white, upper_white)
+            
+            # Apply morphological operations to clean up the mask
+            kernel = np.ones((3, 3), np.uint8)
+            mask_white = cv2.morphologyEx(mask_white, cv2.MORPH_OPEN, kernel)
+            mask_white = cv2.morphologyEx(mask_white, cv2.MORPH_CLOSE, kernel)
+            
+            # Find contours of potential cards
+            contours, _ = cv2.findContours(mask_white, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            # Sort contours from left to right (as community cards are typically laid out)
+            contours = sorted(contours, key=lambda c: cv2.boundingRect(c)[0])
+            
+            # Filter contours to find card-like shapes
+            detected_cards = []
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                
+                # Filter by area (cards should be within a reasonable size range)
+                min_card_area = (roi_w * roi_h) * 0.02  # Cards take at least 2% of ROI
+                max_card_area = (roi_w * roi_h) * 0.15  # Cards take at most 15% of ROI
+                
+                if min_card_area < area < max_card_area:
+                    # Get bounding rectangle for the contour
+                    x, y, w, h = cv2.boundingRect(contour)
+                    
+                    # Check if aspect ratio is card-like (height:width ratio ~1.4:1)
+                    aspect_ratio = h / w
+                    if 1.2 < aspect_ratio < 1.6:
+                        # Extract the card image
+                        card_img = roi[y:y+h, x:x+w]
+                        detected_cards.append((x, y, w, h, card_img))
+            
+            # Process detected cards (maximum of 5 for community cards)
+            processed_count = 0
+            for x, y, w, h, card_img in detected_cards[:5]:
+                # Get the rank and suit
+                rank, suit = self._identify_card(card_img)
+                
+                if rank and suit:
+                    cards.append(Card(rank, suit))
+                    processed_count += 1
+                    logger.info(f"Detected community card: {rank}{suit}")
+            
+            if not cards:
+                logger.debug("No community cards detected")
+            else:
+                # Save debug image if in debug mode
+                if self.debug_mode and time.time() - self.last_debug_time > 30:
+                    debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
+                    os.makedirs(debug_dir, exist_ok=True)
+                    
+                    debug_img = roi.copy()
+                    for x, y, w, h, _ in detected_cards:
+                        cv2.rectangle(debug_img, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                    
+                    debug_path = os.path.join(debug_dir, f'community_cards_{int(time.time())}.png')
+                    cv2.imwrite(debug_path, debug_img)
+                    logger.info(f"Saved community cards debug image to {debug_path}")
+            
+        except Exception as e:
+            logger.exception(f"Error detecting community cards: {e}")
+            
+        return cards
+        
+    def _detect_pot_size(self, screenshot):
+        """
+        Detect the current pot size from the screenshot using OCR.
+        
+        Args:
+            screenshot (numpy.ndarray): The screenshot to analyze.
+            
+        Returns:
+            float: The detected pot size.
+        """
+        try:
+            h, w = screenshot.shape[:2]
+            
+            # Define region where pot size is typically displayed (center-top of the table)
+            roi_x = int(w * 0.4)
+            roi_y = int(h * 0.3)
+            roi_w = int(w * 0.2)
+            roi_h = int(h * 0.08)
+            
+            # Extract the region of interest
+            roi = screenshot[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
+            
+            # Preprocess the image for better OCR
+            preprocessed = self._preprocess_for_ocr(roi)
+            
+            # Use OCR to extract text
+            text = pytesseract.image_to_string(
+                preprocessed,
+                config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789.,$'
+            )
+            
+            # Clean and parse the text
+            pot_size = self._parse_money_value(text)
+            
+            if pot_size > 0:
+                logger.info(f"Detected pot size: ${pot_size:.2f}")
+                
+                # Save debug image
+                if self.debug_mode and time.time() - self.last_debug_time > 30:
+                    debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
+                    os.makedirs(debug_dir, exist_ok=True)
+                    
+                    debug_path = os.path.join(debug_dir, f'pot_size_{int(time.time())}.png')
+                    cv2.imwrite(debug_path, roi)
+                    logger.info(f"Saved pot size debug image to {debug_path}")
+                
+                return pot_size
+            else:
+                logger.debug("No pot size detected or pot size is zero")
+                return 0.0
+                
+        except Exception as e:
+            logger.exception(f"Error detecting pot size: {e}")
+            return 0.0
+            
+    def _parse_money_value(self, text):
+        """
+        Parse a text string to extract a monetary value.
+        
+        Args:
+            text (str): Text to parse.
+            
+        Returns:
+            float: Extracted monetary value.
+        """
+        if not text:
+            return 0.0
+            
+        # Remove non-numeric characters except decimal point
+        # First, check if there's a specific pattern like "Pot: $123.45"
+        import re
+        
+        # Look for patterns like "pot: $123.45" or "$123.45"
+        pot_pattern = re.search(r'(?:pot:?\s*)?[$]?(\d+(?:\.\d+)?)', text.lower())
+        if pot_pattern:
+            try:
+                return float(pot_pattern.group(1))
+            except ValueError:
+                pass
+        
+        # If no pattern matched, try to extract any number
+        digits_only = ''.join(c for c in text if c.isdigit() or c == '.')
+        
+        # Handle multiple decimal points
+        parts = digits_only.split('.')
+        if len(parts) > 2:
+            # Keep only the first decimal point
+            digits_only = parts[0] + '.' + ''.join(parts[1:]).replace('.', '')
+        
+        try:
+            return float(digits_only) if digits_only else 0.0
+        except ValueError:
+            return 0.0
+            
+    def _detect_current_bet(self, screenshot):
+        """
+        Detect the current bet amount from the screenshot using OCR.
+        
+        Args:
+            screenshot (numpy.ndarray): The screenshot to analyze.
+            
+        Returns:
+            float: The detected current bet amount.
+        """
+        try:
+            h, w = screenshot.shape[:2]
+            
+            # Define region where the current bet is typically displayed
+            # Usually in the center-bottom area of the table
+            roi_x = int(w * 0.4)
+            roi_y = int(h * 0.55)
+            roi_w = int(w * 0.2)
+            roi_h = int(h * 0.05)
+            
+            # Extract the region of interest
+            roi = screenshot[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
+            
+            # Preprocess the image for better OCR
+            preprocessed = self._preprocess_for_ocr(roi)
+            
+            # Use OCR to extract text
+            text = pytesseract.image_to_string(
+                preprocessed,
+                config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789.,$'
+            )
+            
+            # Parse the bet amount
+            bet_amount = self._parse_money_value(text)
+            
+            if bet_amount > 0:
+                logger.info(f"Detected current bet: ${bet_amount:.2f}")
+                
+                # Save debug image
+                if self.debug_mode and time.time() - self.last_debug_time > 30:
+                    debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
+                    os.makedirs(debug_dir, exist_ok=True)
+                    
+                    debug_path = os.path.join(debug_dir, f'current_bet_{int(time.time())}.png')
+                    cv2.imwrite(debug_path, roi)
+                    logger.info(f"Saved current bet debug image to {debug_path}")
+                
+                return bet_amount
+            else:
+                logger.debug("No current bet detected or bet is zero")
+                return 0.0
+                
+        except Exception as e:
+            logger.exception(f"Error detecting current bet: {e}")
+            return 0.0
+        
+    def _detect_player_stack(self, screenshot):
+        """
+        Detect the player's chip stack from the screenshot using OCR.
+        
+        Args:
+            screenshot (numpy.ndarray): The screenshot to analyze.
+            
+        Returns:
+            float: The detected player stack amount.
+        """
+        try:
+            h, w = screenshot.shape[:2]
+            
+            # Define region where player stack is typically displayed
+            # Usually near the bottom of the screen, in front of the player
+            roi_x = int(w * 0.45)
+            roi_y = int(h * 0.8)
+            roi_w = int(w * 0.1)
+            roi_h = int(h * 0.05)
+            
+            # Extract the region of interest
+            roi = screenshot[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
+            
+            # Preprocess the image for better OCR
+            preprocessed = self._preprocess_for_ocr(roi)
+            
+            # Use OCR to extract text
+            text = pytesseract.image_to_string(
+                preprocessed,
+                config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789.,$'
+            )
+            
+            # Parse the stack amount
+            stack_amount = self._parse_money_value(text)
+            
+            # If no stack was detected or the value is unreasonably small,
+            # use a default value (this should be configured)
+            if stack_amount <= 0:
+                logger.debug("Could not detect player stack, using default value")
+                return self.config.get('default_stack', 100.0)
+                
+            logger.info(f"Detected player stack: ${stack_amount:.2f}")
+            
+            # Save debug image
+            if self.debug_mode and time.time() - self.last_debug_time > 30:
+                debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
+                os.makedirs(debug_dir, exist_ok=True)
+                
+                debug_path = os.path.join(debug_dir, f'player_stack_{int(time.time())}.png')
+                cv2.imwrite(debug_path, roi)
+                logger.info(f"Saved player stack debug image to {debug_path}")
+                
+            return stack_amount
+                
+        except Exception as e:
+            logger.exception(f"Error detecting player stack: {e}")
+            return self.config.get('default_stack', 100.0)
+        
+    def _detect_position(self, screenshot):
+        """
+        Detect the player's position based on dealer button location.
+        
+        Args:
+            screenshot (numpy.ndarray): The screenshot to analyze.
+            
+        Returns:
+            str: The player's position ('early', 'middle', 'late', 'sb', 'bb', 'dealer').
+        """
+        try:
+            h, w = screenshot.shape[:2]
+            
+            # Define region where the dealer button could be located
+            # This typically spans the whole table area
+            roi_x = int(w * 0.2)
+            roi_y = int(h * 0.3)
+            roi_w = int(w * 0.6)
+            roi_h = int(h * 0.4)
+            
+            # Extract the region of interest
+            roi = screenshot[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
+            
+            # Convert to HSV for better color detection
+            hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            
+            # Look for dealer button (typically white/gray or bright colored circular object)
+            # Define color ranges for common dealer button colors
+            # White/gray button
+            lower_white = np.array([0, 0, 180])
+            upper_white = np.array([180, 30, 255])
+            white_mask = cv2.inRange(hsv_roi, lower_white, upper_white)
+            
+            # Yellow button (some clients use yellow)
+            lower_yellow = np.array([20, 100, 100])
+            upper_yellow = np.array([40, 255, 255])
+            yellow_mask = cv2.inRange(hsv_roi, lower_yellow, upper_yellow)
+            
+            # Combine masks
+            combined_mask = cv2.bitwise_or(white_mask, yellow_mask)
+            
+            # Apply morphological operations to clean up the mask
+            kernel = np.ones((3, 3), np.uint8)
+            combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_OPEN, kernel)
+            combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_CLOSE, kernel)
+            
+            # Find contours for potential dealer buttons
+            contours, _ = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            # Look for circular/oval shapes that could be the dealer button
+            dealer_button_x = None
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                
+                # Filter by size (dealer button is typically small)
+                min_area = (roi_w * roi_h) * 0.001  # At least 0.1% of ROI
+                max_area = (roi_w * roi_h) * 0.01   # At most 1% of ROI
+                
+                if min_area < area < max_area:
+                    # Check if the shape is approximately circular
+                    perimeter = cv2.arcLength(contour, True)
+                    circularity = 4 * np.pi * area / (perimeter * perimeter)
+                    
+                    # Circles have circularity close to 1.0
+                    if circularity > 0.7:  # Allow some tolerance for oval shapes
+                        # Get the center of the contour
+                        M = cv2.moments(contour)
+                        if M["m00"] != 0:
+                            cx = int(M["m10"] / M["m00"])
+                            
+                            # Update the dealer button x-coordinate (using leftmost if multiple detected)
+                            if dealer_button_x is None or cx < dealer_button_x:
+                                dealer_button_x = cx
+                                
+                                # Save debug image
+                                if self.debug_mode and time.time() - self.last_debug_time > 30:
+                                    debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
+                                    os.makedirs(debug_dir, exist_ok=True)
+                                    
+                                    debug_img = roi.copy()
+                                    cv2.drawContours(debug_img, [contour], 0, (0, 255, 0), 2)
+                                    
+                                    debug_path = os.path.join(debug_dir, f'dealer_button_{int(time.time())}.png')
+                                    cv2.imwrite(debug_path, debug_img)
+                                    logger.info(f"Saved dealer button debug image to {debug_path}")
+            
+            if dealer_button_x is None:
+                logger.debug("Could not detect dealer button")
+                return "unknown"
+                
+            # Determine player position based on the dealer button location
+            # This is a simplified approach and assumes 6-max table
+            # For more accurate results, we'd need to detect all players and their relative positions
+            
+            # Divide the table into regions (left to right)
+            third_width = roi_w / 3
+            
+            if dealer_button_x < third_width:  # Left third of the table
+                # If dealer is on the left, we're in late position
+                position = "late"
+                logger.info(f"Detected position: {position} (dealer on left)")
+            elif dealer_button_x < 2 * third_width:  # Middle third
+                position = "middle"
+                logger.info(f"Detected position: {position} (dealer in middle)")
+            else:  # Right third
+                # If dealer is on the right, we're in early position
+                position = "early"
+                logger.info(f"Detected position: {position} (dealer on right)")
+                
+            return position
+            
+        except Exception as e:
+            logger.exception(f"Error detecting player position: {e}")
+            return "unknown"
+        
+    def _detect_is_our_turn(self, screenshot):
+        """
+        Check if it's currently our turn to act by looking for active action buttons.
+        
+        Args:
+            screenshot (numpy.ndarray): The screenshot to analyze.
+            
+        Returns:
+            bool: True if it's our turn to act, False otherwise.
+        """
+        try:
+            h, w = screenshot.shape[:2]
+            
+            # Define region where action buttons are typically located
+            # Usually at the bottom of the screen
+            roi_x = int(w * 0.3)
+            roi_y = int(h * 0.8)
+            roi_w = int(w * 0.4)
+            roi_h = int(h * 0.15)
+            
+            # Extract the region of interest
+            roi = screenshot[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
+            
+            # Convert to HSV for better color detection
+            hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            
+            # Detect active buttons by looking for bright, saturated colors
+            # (Poker sites typically highlight active buttons with bright colors)
+            
+            # Define color ranges for common active button colors
+            
+            # Green buttons (often used for "Call" or "Check")
+            lower_green = np.array([40, 50, 50])
+            upper_green = np.array([80, 255, 255])
+            green_mask = cv2.inRange(hsv_roi, lower_green, upper_green)
+            
+            # Red/Orange buttons (often used for "Fold")
+            lower_red1 = np.array([0, 50, 50])
+            upper_red1 = np.array([10, 255, 255])
+            lower_red2 = np.array([170, 50, 50])
+            upper_red2 = np.array([180, 255, 255])
+            red_mask = cv2.inRange(hsv_roi, lower_red1, upper_red1) | cv2.inRange(hsv_roi, lower_red2, upper_red2)
+            
+            # Blue buttons (sometimes used for "Bet" or "Raise")
+            lower_blue = np.array([100, 50, 50])
+            upper_blue = np.array([140, 255, 255])
+            blue_mask = cv2.inRange(hsv_roi, lower_blue, upper_blue)
+            
+            # Yellow buttons
+            lower_yellow = np.array([20, 100, 100]) 
+            upper_yellow = np.array([40, 255, 255])
+            yellow_mask = cv2.inRange(hsv_roi, lower_yellow, upper_yellow)
+            
+            # Combine all color masks to find any active button
+            combined_mask = cv2.bitwise_or(green_mask, cv2.bitwise_or(red_mask, cv2.bitwise_or(blue_mask, yellow_mask)))
+            
+            # Find contours of potential buttons
+            contours, _ = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            # Filter contours to find button-like shapes
+            active_buttons = []
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                
+                # Filter by size (buttons should be within a reasonable size range)
+                min_button_area = (roi_w * roi_h) * 0.01  # At least 1% of ROI
+                max_button_area = (roi_w * roi_h) * 0.15  # At most 15% of ROI
+                
+                if min_button_area < area < max_button_area:
+                    # Get bounding rectangle
+                    x, y, w, h = cv2.boundingRect(contour)
+                    
+                    # Check aspect ratio (buttons are typically wider than tall)
+                    aspect_ratio = w / h
+                    if 1.5 < aspect_ratio < 5:
+                        active_buttons.append((x, y, w, h))
+            
+            # If we found button-like shapes with active colors, it's likely our turn
+            is_our_turn = len(active_buttons) > 0
+            
+            # Save debug image
+            if self.debug_mode and (is_our_turn or time.time() - self.last_debug_time > 30):
+                debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
+                os.makedirs(debug_dir, exist_ok=True)
+                
+                debug_img = roi.copy()
+                for x, y, w, h in active_buttons:
+                    cv2.rectangle(debug_img, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                
+                debug_path = os.path.join(debug_dir, f'turn_detection_{int(time.time())}.png')
+                cv2.imwrite(debug_path, debug_img)
+                logger.info(f"Saved turn detection debug image to {debug_path}")
+            
+            if is_our_turn:
+                logger.info("It's our turn to act")
+            else:
+                logger.debug("It's not our turn to act")
+                
+            return is_our_turn
+            
+        except Exception as e:
+            logger.exception(f"Error detecting if it's our turn: {e}")
+            return False
+        
     def _detect_available_actions(self, screenshot):
-        """Detect available actions (fold, check, call, bet, raise)."""
-        # Placeholder implementation
-        return ["fold", "check", "bet"]
+        """
+        Detect available actions (fold, check, call, bet, raise) based on visible buttons.
+        
+        Args:
+            screenshot (numpy.ndarray): The screenshot to analyze.
+            
+        Returns:
+            list: List of available action strings.
+        """
+        available_actions = []
+        
+        try:
+            # If it's not our turn, no actions are available
+            if not self._detect_is_our_turn(screenshot):
+                return []
+                
+            h, w = screenshot.shape[:2]
+            
+            # Define the region where action buttons are typically located
+            roi_x = int(w * 0.3)
+            roi_y = int(h * 0.8)
+            roi_w = int(w * 0.4)
+            roi_h = int(h * 0.15)
+            
+            # Extract the region of interest
+            roi = screenshot[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
+            
+            # Convert to HSV for better color detection
+            hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            
+            # Define color ranges for different types of buttons
+            # Red/orange buttons (often fold)
+            lower_red1 = np.array([0, 70, 50])
+            upper_red1 = np.array([10, 255, 255])
+            lower_red2 = np.array([170, 70, 50])
+            upper_red2 = np.array([180, 255, 255])
+            red_mask = cv2.inRange(hsv_roi, lower_red1, upper_red1) | cv2.inRange(hsv_roi, lower_red2, upper_red2)
+            
+            # Green buttons (often check/call)
+            lower_green = np.array([40, 40, 40])
+            upper_green = np.array([80, 255, 255])
+            green_mask = cv2.inRange(hsv_roi, lower_green, upper_green)
+            
+            # Blue buttons (often bet/raise)
+            lower_blue = np.array([100, 40, 40])
+            upper_blue = np.array([140, 255, 255])
+            blue_mask = cv2.inRange(hsv_roi, lower_blue, upper_blue)
+            
+            # Define masks for button regions (left, middle, right)
+            third_width = roi_w // 3
+            
+            left_mask = np.zeros_like(red_mask)
+            left_mask[:, :third_width] = 255
+            
+            middle_mask = np.zeros_like(red_mask)
+            middle_mask[:, third_width:2*third_width] = 255
+            
+            right_mask = np.zeros_like(red_mask)
+            right_mask[:, 2*third_width:] = 255
+            
+            # Find active buttons in each region and by color
+            # Left region (typically fold)
+            left_red = cv2.bitwise_and(red_mask, left_mask)
+            if cv2.countNonZero(left_red) > 50:
+                available_actions.append("fold")
+            
+            # Middle region (typically check/call)
+            middle_green = cv2.bitwise_and(green_mask, middle_mask)
+            if cv2.countNonZero(middle_green) > 50:
+                # Try to determine if it's check or call using OCR
+                # Crop the middle section
+                middle_roi = roi[:, third_width:2*third_width]
+                gray = cv2.cvtColor(middle_roi, cv2.COLOR_BGR2GRAY)
+                _, binary = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+                
+                # Use OCR to read the text
+                middle_text = pytesseract.image_to_string(binary).lower()
+                
+                if 'check' in middle_text:
+                    available_actions.append("check")
+                elif 'call' in middle_text:
+                    available_actions.append("call")
+                else:
+                    # If we can't determine, add both possibilities
+                    # The decision maker can handle this ambiguity
+                    available_actions.append("check")
+                    available_actions.append("call")
+            
+            # Right region (typically bet/raise)
+            right_blue = cv2.bitwise_and(blue_mask, right_mask)
+            if cv2.countNonZero(right_blue) > 50:
+                # Try to determine if it's bet or raise
+                right_roi = roi[:, 2*third_width:]
+                gray = cv2.cvtColor(right_roi, cv2.COLOR_BGR2GRAY)
+                _, binary = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+                
+                # Use OCR to read text
+                right_text = pytesseract.image_to_string(binary).lower()
+                
+                if 'bet' in right_text:
+                    available_actions.append("bet")
+                elif 'raise' in right_text:
+                    available_actions.append("raise")
+                else:
+                    # If we can't determine, add both possibilities
+                    available_actions.append("bet")
+                    available_actions.append("raise")
+            
+            # If no specific actions were detected but it's our turn,
+            # include default actions as a fallback
+            if not available_actions and self._detect_is_our_turn(screenshot):
+                available_actions = ["fold", "check", "bet"]
+            
+            logger.info(f"Detected available actions: {available_actions}")
+            
+            # Save debug image
+            if self.debug_mode and available_actions and time.time() - self.last_debug_time > 30:
+                debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
+                os.makedirs(debug_dir, exist_ok=True)
+                
+                debug_img = roi.copy()
+                
+                # Visualize button regions
+                cv2.line(debug_img, (third_width, 0), (third_width, roi_h), (0, 255, 255), 2)
+                cv2.line(debug_img, (2*third_width, 0), (2*third_width, roi_h), (0, 255, 255), 2)
+                
+                # Add text for detected actions
+                y = 20
+                for action in available_actions:
+                    cv2.putText(debug_img, action, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    y += 20
+                
+                debug_path = os.path.join(debug_dir, f'available_actions_{int(time.time())}.png')
+                cv2.imwrite(debug_path, debug_img)
+                logger.info(f"Saved available actions debug image to {debug_path}")
+                
+        except Exception as e:
+            logger.exception(f"Error detecting available actions: {e}")
+            # Provide default actions as fallback
+            available_actions = ["fold", "check", "bet"]
+            
+        return available_actions
         
     def _preprocess_for_ocr(self, img):
         """Preprocess image for better OCR results."""
