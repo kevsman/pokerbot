@@ -557,35 +557,62 @@ class CardIdentifier:
         score = 0
         h, w = shape
         
-        # Heart characteristics: 
+        # Enhanced heart characteristics: 
         # 1. Two circular bumps at top
         # 2. Pointed bottom
+        # 3. Symmetrical along vertical axis
         
         for cnt in contours:
             if len(cnt) < 5:
                 continue
                 
             try:
+                # Get bounding box
+                x, y, w_cnt, h_cnt = cv2.boundingRect(cnt)
+                
+                # Check aspect ratio - hearts are typically taller than wide
+                if w_cnt > 0 and 0.7 < h_cnt/w_cnt < 2.0:
+                    score += 5
+                
                 # Check for pointed bottom - safely extract y coordinates
                 cnt_reshaped = cnt.reshape(-1, 2)  # Reshape to 2D array of [x,y] coordinates
                 y_coords = cnt_reshaped[:, 1]      # Get all y coordinates
                 bottom_y = np.max(y_coords)
                 
                 # Find points near the bottom
-                bottom_points = cnt_reshaped[y_coords >= bottom_y - 2]
+                bottom_points = cnt_reshaped[y_coords >= bottom_y - 3]
                 
                 # A pointed bottom will have relatively few points at the max y-coordinate
                 if len(bottom_points) < 5:
-                    score += 5
+                    score += 8
                 
                 # Check for two bumps at top using convexity defects
                 hull = cv2.convexHull(cnt)
                 hull_area = cv2.contourArea(hull)
                 cnt_area = cv2.contourArea(cnt)
                 
-                # Hearts have concavities, so contour area is significantly less than hull area
+                # Hearts have concavities (the dip between the two lobes and bottom point)
+                # so contour area is significantly less than hull area
                 if cnt_area > 0 and hull_area / cnt_area > 1.2:
-                    score += 10
+                    score += 12
+                    
+                # Check for symmetry along vertical axis
+                # First, determine the vertical midline
+                left_x = np.min(cnt_reshaped[:, 0])
+                right_x = np.max(cnt_reshaped[:, 0])
+                mid_x = (left_x + right_x) / 2
+                
+                # Split points into left and right of midline
+                left_points = cnt_reshaped[cnt_reshaped[:, 0] < mid_x]
+                right_points = cnt_reshaped[cnt_reshaped[:, 0] >= mid_x]
+                
+                # For hearts, the distribution should be roughly symmetric
+                if left_points.shape[0] > 0 and right_points.shape[0] > 0:
+                    left_ratio = left_points.shape[0] / cnt_reshaped.shape[0]
+                    # Hearts should have approximately equal distribution
+                    if 0.4 <= left_ratio <= 0.6:
+                        score += 10
+                
             except Exception as e:
                 logger.debug(f"Error in heart shape detection: {e}")
                 
@@ -596,10 +623,10 @@ class CardIdentifier:
         score = 0
         h, w = shape
         
-        # Diamond characteristics: 
-        # 1. Four corners with similar angles
-        # 2. Symmetrical shape
-        # 3. Approximates a rhombus
+        # Enhanced diamond characteristics: 
+        # 1. Four corners with similar angles (rhombus)
+        # 2. High symmetry both horizontally and vertically
+        # 3. More compact shape compared to heart
         
         for cnt in contours:
             if len(cnt) < 5:
@@ -612,11 +639,56 @@ class CardIdentifier:
                 
                 if len(approx) == 4:
                     score += 15  # Strong indicator of diamond
+                elif 3 <= len(approx) <= 6:  # Allow some tolerance
+                    score += 5
+                
+                # Get bounding rect
+                x, y, w_cnt, h_cnt = cv2.boundingRect(cnt)
                 
                 # Check if width/height ratio is close to 1 (diamond is typically symmetric)
-                x, y, w, h = cv2.boundingRect(cnt)
-                if w > 0 and h > 0 and 0.7 < w/h < 1.3:
-                    score += 5
+                if w_cnt > 0 and 0.7 < h_cnt/w_cnt < 1.4:
+                    score += 8
+                
+                # Check convexity - diamonds are convex shapes
+                hull = cv2.convexHull(cnt)
+                hull_area = cv2.contourArea(hull)
+                cnt_area = cv2.contourArea(cnt)
+                
+                # A perfect diamond should have area close to its convex hull
+                if cnt_area > 0 and hull_area > 0:
+                    solidity = cnt_area / hull_area
+                    if solidity > 0.8:  # Diamond is very solid (no concavities)
+                        score += 10
+                        
+                # Check for symmetry - diamonds are symmetrical
+                cnt_reshaped = cnt.reshape(-1, 2)
+                if len(cnt_reshaped) > 0:
+                    # Horizontal symmetry
+                    left_x = np.min(cnt_reshaped[:, 0])
+                    right_x = np.max(cnt_reshaped[:, 0])
+                    mid_x = (left_x + right_x) / 2
+                    
+                    left_points = cnt_reshaped[cnt_reshaped[:, 0] < mid_x]
+                    right_points = cnt_reshaped[cnt_reshaped[:, 0] >= mid_x]
+                    
+                    if left_points.shape[0] > 0 and right_points.shape[0] > 0:
+                        left_ratio = left_points.shape[0] / cnt_reshaped.shape[0]
+                        if 0.4 <= left_ratio <= 0.6:  # Roughly equal distribution
+                            score += 5
+                            
+                    # Vertical symmetry
+                    top_y = np.min(cnt_reshaped[:, 1])
+                    bottom_y = np.max(cnt_reshaped[:, 1])
+                    mid_y = (top_y + bottom_y) / 2
+                    
+                    top_points = cnt_reshaped[cnt_reshaped[:, 1] < mid_y]
+                    bottom_points = cnt_reshaped[cnt_reshaped[:, 1] >= mid_y]
+                    
+                    if top_points.shape[0] > 0 and bottom_points.shape[0] > 0:
+                        top_ratio = top_points.shape[0] / cnt_reshaped.shape[0]
+                        if 0.4 <= top_ratio <= 0.6:  # Roughly equal distribution
+                            score += 5
+                
             except Exception as e:
                 logger.debug(f"Error in diamond shape detection: {e}")
                 
@@ -627,9 +699,10 @@ class CardIdentifier:
         score = 0
         h, w = shape
         
-        # Spade characteristics:
+        # Enhanced spade characteristics:
         # 1. Triangular top
         # 2. Small stem at bottom
+        # 3. Symmetrical along vertical axis
         
         for cnt in contours:
             if len(cnt) < 5:
@@ -639,14 +712,18 @@ class CardIdentifier:
                 # Reshape contour to 2D array for easier indexing
                 cnt_reshaped = cnt.reshape(-1, 2)
                 
+                # Check overall aspect ratio - spades are typically taller than wide
+                x, y, w_cnt, h_cnt = cv2.boundingRect(cnt)
+                if w_cnt > 0 and h_cnt/w_cnt > 1.2:
+                    score += 5
+                
                 # Get the topmost point - find the minimum y-coordinate
                 y_coords = cnt_reshaped[:, 1]
                 topmost_idx = np.argmin(y_coords)
-                topmost = tuple(cnt_reshaped[topmost_idx])
                 
                 # Check for triangular top
                 # Get points in the top half
-                top_half_indices = np.where(cnt_reshaped[:, 1] < h//2)[0]
+                top_half_indices = np.where(cnt_reshaped[:, 1] < (y_coords[0] + h)//2)[0]
                 if len(top_half_indices) >= 3:
                     top_half = cnt_reshaped[top_half_indices]
                     
@@ -656,7 +733,9 @@ class CardIdentifier:
                     approx = cv2.approxPolyDP(top_hull, epsilon, True)
                     
                     if len(approx) == 3:
-                        score += 10  # Strong indicator of spade
+                        score += 12  # Strong indicator of spade
+                    elif len(approx) == 4:
+                        score += 5   # Could still be a spade
                         
                 # Check for narrow stem at bottom
                 # Get points in the bottom third
@@ -669,8 +748,25 @@ class CardIdentifier:
                         x_coords = bottom_part[:, 0]
                         bottom_width = np.max(x_coords) - np.min(x_coords)
                         
+                        # Spades have a distinctive narrow stem at the bottom
                         if bottom_width < w//2:
-                            score += 5  # Narrow stem is typical for spades
+                            score += 8
+                        
+                # Check for symmetry along vertical axis (spades are symmetric)
+                left_x = np.min(cnt_reshaped[:, 0])
+                right_x = np.max(cnt_reshaped[:, 0])
+                mid_x = (left_x + right_x) / 2
+                
+                # Split points into left and right of midline
+                left_points = cnt_reshaped[cnt_reshaped[:, 0] < mid_x]
+                right_points = cnt_reshaped[cnt_reshaped[:, 0] >= mid_x]
+                
+                if left_points.shape[0] > 0 and right_points.shape[0] > 0:
+                    left_ratio = left_points.shape[0] / cnt_reshaped.shape[0]
+                    # Spades should have approximately equal distribution
+                    if 0.4 <= left_ratio <= 0.6:
+                        score += 8
+                        
             except Exception as e:
                 logger.debug(f"Error in spade shape detection: {e}")
                     
@@ -681,13 +777,18 @@ class CardIdentifier:
         score = 0
         h, w = shape
         
-        # Club characteristics:
+        # Enhanced club characteristics:
         # 1. Multiple circular lobes (typically 3)
         # 2. Small stem at bottom
+        # 3. Distinctive triple-circle pattern
         
         # First, check if there are multiple distinct contours (club lobes)
         if len(contours) >= 2:
-            score += 10  # Increase the weight for multiple contours (strong club indicator)
+            score += 10  # Multiple contours are a strong club indicator
+            
+        # Check for 3 distinctly separated regions in the upper part
+        if len(contours) == 3:
+            score += 5  # Perfect club match
             
         for cnt in contours:
             if len(cnt) < 5:
@@ -706,7 +807,15 @@ class CardIdentifier:
                 circularity = 4 * np.pi * area / (perimeter * perimeter) if perimeter > 0 else 0
                 
                 if circularity > 0.6:
-                    score += 15  # Increase weight for circular shapes (strong club indicator)
+                    score += 12  # Strong indicator for club's circular lobes
+                    
+                # Check for compactness - clubs tend to be compact overall
+                x, y, w_cnt, h_cnt = cv2.boundingRect(cnt)
+                extent = float(area) / (w_cnt * h_cnt) if (w_cnt * h_cnt) > 0 else 0
+                
+                # Check if the contour fills a significant portion of its bounding rectangle
+                if 0.4 < extent < 0.8:  # Club's multiple lobes create a medium extent
+                    score += 5
                     
                 # Check for small stem at bottom
                 bottom_indices = np.where(cnt_reshaped[:, 1] > 2*h//3)[0]
@@ -719,7 +828,29 @@ class CardIdentifier:
                         bottom_width = np.max(x_coords) - np.min(x_coords)
                         
                         if bottom_width < w//3:
-                            score += 5  # Narrow stem is typical for clubs
+                            score += 8  # Narrow stem is typical for clubs
+                            
+                # Check for three-lobe pattern using moments
+                moments = cv2.moments(cnt)
+                if moments['m00'] != 0:
+                    cx = int(moments['m10'] / moments['m00'])
+                    cy = int(moments['m01'] / moments['m00'])
+                    
+                    # For a club, points should distribute evenly around the center of mass
+                    # in the upper portion (the three lobes)
+                    upper_points = cnt_reshaped[cnt_reshaped[:, 1] < cy]
+                    
+                    if len(upper_points) > 0:
+                        # Calculate distances from each point to centroid
+                        dists = np.sqrt((upper_points[:, 0] - cx)**2 + (upper_points[:, 1] - cy)**2)
+                        mean_dist = np.mean(dists)
+                        std_dist = np.std(dists)
+                        
+                        # For clubs, there should be a consistent pattern of distances
+                        # (the three lobes are roughly equidistant from center)
+                        if std_dist / mean_dist < 0.5:  # Low variation in distances
+                            score += 8
+                            
             except Exception as e:
                 logger.debug(f"Error in club shape detection: {e}")
                     
