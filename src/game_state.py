@@ -348,10 +348,17 @@ class GameStateDetector:
             
             # Define region of interest (ROI) where player cards are usually located
             # These values need to be calibrated based on the specific poker client
-            roi_x = int(w * 0.3)  # Start at 40% from the left
+            # For bærbar
+            # roi_x = int(w * 0.3)  # Start at 40% from the left
+            # roi_y = int(h * 0.6)  # Start at 60% from the top
+            # roi_w = int(w * 0.2)  # Width is 20% of the screen width
+            # roi_h = int(h * 0.10)  # Height is 15% of the screen height
+
+            #For stasjonær
+            roi_x = int(w * 0.22)  # Start at 40% from the left
             roi_y = int(h * 0.6)  # Start at 60% from the top
-            roi_w = int(w * 0.2)  # Width is 20% of the screen width
-            roi_h = int(h * 0.10)  # Height is 15% of the screen height
+            roi_w = int(w * 0.07)  # Width is 20% of the screen width
+            roi_h = int(h * 0.08)  # Height is 15% of the screen height
 
             # Add debugging info
             logger.info(f"[CARD DEBUG] Screenshot size: {w}x{h}")
@@ -1114,10 +1121,17 @@ class GameStateDetector:
             h, w = screenshot.shape[:2]
             
             # Define region of interest (ROI) where community cards are typically located
-            roi_x = int(w * 0.25)  # Start at 30% from the left
-            roi_y = int(h * 0.3)  # Start at 40% from the top
-            roi_w = int(w * 0.4)  # Width is 40% of the screen width
-            roi_h = int(h * 0.15)  # Height is 15% of the screen height
+            # For bærbar
+            # roi_x = int(w * 0.25)  # Start at 30% from the left
+            # roi_y = int(h * 0.3)  # Start at 40% from the top
+            # roi_w = int(w * 0.4)  # Width is 40% of the screen width
+            # roi_h = int(h * 0.15)  # Height is 15% of the screen height
+
+            # For stasjonær
+            roi_x = int(w * 0.15)  # Start at 30% from the left
+            roi_y = int(h * 0.4)  # Start at 40% from the top
+            roi_w = int(w * 0.2)  # Width is 40% of the screen width
+            roi_h = int(h * 0.10)  # Height is 15% of the screen height
             
             # Add debugging info
             logger.info(f"[COMM CARD DEBUG] Screenshot size: {w}x{h}")
@@ -1282,10 +1296,17 @@ class GameStateDetector:
             h, w = screenshot.shape[:2]
             
             # Define region where pot size is typically displayed (center-top of the table)
-            roi_x = int(w * 0.4)
-            roi_y = int(h * 0.3)
-            roi_w = int(w * 0.2)
-            roi_h = int(h * 0.08)
+            #For bærbar
+            # roi_x = int(w * 0.4)
+            # roi_y = int(h * 0.3)
+            # roi_w = int(w * 0.2)
+            # roi_h = int(h * 0.08)
+
+            #For stasjonær
+            roi_x = int(w * 0.22)
+            roi_y = int(h * 0.36)
+            roi_w = int(w * 0.07)
+            roi_h = int(h * 0.05)
             
             # Add debugging info
             logger.info(f"[POT DEBUG] Screenshot size: {w}x{h}")
@@ -1414,10 +1435,37 @@ class GameStateDetector:
             
             # Define region where the current bet is typically displayed
             # Usually in the center-bottom area of the table
-            roi_x = int(w * 0.4)
-            roi_y = int(h * 0.55)
-            roi_w = int(w * 0.2)
-            roi_h = int(h * 0.05)
+            # Bærbar
+            # roi_x = int(w * 0.4)
+            # roi_y = int(h * 0.55)
+            # roi_w = int(w * 0.2)
+            # roi_h = int(h * 0.05)
+
+            # Stasjonær
+            roi_x = int(w * 0.22)  # Start at 40% from the left
+            roi_y = int(h * 0.55)  # Start at 60% from the top
+            roi_w = int(w * 0.06)  # Width is 20% of the screen width
+            roi_h = int(h * 0.05)  # Height is 15% of the screen height
+            
+            # Add debugging info
+            logger.info(f"[BET DEBUG] Screenshot size: {w}x{h}")
+            logger.info(f"[BET DEBUG] Current bet ROI: x={roi_x}, y={roi_y}, width={roi_w}, height={roi_h}")
+            
+            # Create a debug image for visualization
+            debug_img = screenshot.copy()
+            
+            # Draw a rectangle around the ROI we're analyzing
+            cv2.rectangle(debug_img, (roi_x, roi_y), (roi_x + roi_w, roi_y + roi_h), (0, 255, 0), 2)
+            
+            # Draw crosshairs at the center of the ROI
+            center_x = roi_x + roi_w // 2
+            center_y = roi_y + roi_h // 2
+            cv2.line(debug_img, (center_x - 20, center_y), (center_x + 20, center_y), (0, 0, 255), 2)
+            cv2.line(debug_img, (center_x, center_y - 20), (center_x, center_y + 20), (0, 0, 255), 2)
+            
+            # Draw coordinate text
+            cv2.putText(debug_img, f"ROI: ({roi_x},{roi_y})", (roi_x, roi_y - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
             
             # Extract the region of interest
             roi = screenshot[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
@@ -1431,30 +1479,45 @@ class GameStateDetector:
                 config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789.,$'
             )
             
+            logger.info(f"[BET DEBUG] Raw OCR text: '{text}'")
+            
             # Parse the bet amount
             bet_amount = self._parse_money_value(text)
             
+            # Always save debug images to track detection quality
+            debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
+            os.makedirs(debug_dir, exist_ok=True)
+            
+            timestamp = int(time.time())
+            original_path = os.path.join(debug_dir, f'current_bet_roi_{timestamp}.png')
+            preprocessed_path = os.path.join(debug_dir, f'current_bet_preprocessed_{timestamp}.png')
+            debug_path = os.path.join(debug_dir, f'current_bet_debug_{timestamp}.png')
+            
+            cv2.imwrite(original_path, roi)
+            cv2.imwrite(preprocessed_path, preprocessed)
+            
+            # Add OCR results to the debug image
+            cv2.rectangle(debug_img, (10, 10), (350, 80), (0, 0, 0), -1)  # Black background for text
+            cv2.putText(debug_img, f"OCR Text: '{text}'", (20, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            cv2.putText(debug_img, f"Parsed Value: ${bet_amount:.2f}", (20, 60), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
+            
+            # Save the full debug image
+            cv2.imwrite(debug_path, debug_img)
+            logger.info(f"[BET DEBUG] Saved debug images to {debug_dir}")
+            
             if bet_amount > 0:
-                logger.info(f"Detected current bet: ${bet_amount:.2f}")
-                
-                # Save debug image
-                if self.debug_mode and time.time() - self.last_debug_time > 30:
-                    debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
-                    os.makedirs(debug_dir, exist_ok=True)
-                    
-                    debug_path = os.path.join(debug_dir, f'current_bet_{int(time.time())}.png')
-                    cv2.imwrite(debug_path, roi)
-                    logger.info(f"Saved current bet debug image to {debug_path}")
-                
+                logger.info(f"[BET DEBUG] Detected current bet: ${bet_amount:.2f}")
                 return bet_amount
             else:
-                logger.debug("No current bet detected or bet is zero")
+                logger.debug("[BET DEBUG] No current bet detected or bet is zero")
                 return 0.0
                 
         except Exception as e:
             logger.exception(f"Error detecting current bet: {e}")
             return 0.0
-        
+            
     def _detect_player_stack(self, screenshot):
         """
         Detect the player's chip stack from the screenshot using OCR.
@@ -1470,10 +1533,37 @@ class GameStateDetector:
             
             # Define region where player stack is typically displayed
             # Usually near the bottom of the screen, in front of the player
-            roi_x = int(w * 0.45)
-            roi_y = int(h * 0.8)
-            roi_w = int(w * 0.1)
-            roi_h = int(h * 0.05)
+            # Bærbar
+            # roi_x = int(w * 0.45)
+            # roi_y = int(h * 0.8)
+            # roi_w = int(w * 0.1)
+            # roi_h = int(h * 0.05)
+            
+            # Stasjonær
+            roi_x = int(w * 0.22)  # Start at 40% from the left
+            roi_y = int(h * 0.70)  # Start at 60% from the top
+            roi_w = int(w * 0.06)  # Width is 20% of the screen width
+            roi_h = int(h * 0.025)  # Height is 15% of the screen height
+            
+            # Add debugging info
+            logger.info(f"[STACK DEBUG] Screenshot size: {w}x{h}")
+            logger.info(f"[STACK DEBUG] Player stack ROI: x={roi_x}, y={roi_y}, width={roi_w}, height={roi_h}")
+            
+            # Create a debug image for visualization
+            debug_img = screenshot.copy()
+            
+            # Draw a rectangle around the ROI we're analyzing
+            cv2.rectangle(debug_img, (roi_x, roi_y), (roi_x + roi_w, roi_y + roi_h), (0, 255, 0), 2)
+            
+            # Draw crosshairs at the center of the ROI
+            center_x = roi_x + roi_w // 2
+            center_y = roi_y + roi_h // 2
+            cv2.line(debug_img, (center_x - 20, center_y), (center_x + 20, center_y), (0, 0, 255), 2)
+            cv2.line(debug_img, (center_x, center_y - 20), (center_x, center_y + 20), (0, 0, 255), 2)
+            
+            # Draw coordinate text
+            cv2.putText(debug_img, f"ROI: ({roi_x},{roi_y})", (roi_x, roi_y - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
             
             # Extract the region of interest
             roi = screenshot[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
@@ -1487,26 +1577,41 @@ class GameStateDetector:
                 config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789.,$'
             )
             
+            logger.info(f"[STACK DEBUG] Raw OCR text: '{text}'")
+            
             # Parse the stack amount
             stack_amount = self._parse_money_value(text)
+            
+            # Always save debug images to track detection quality
+            debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
+            os.makedirs(debug_dir, exist_ok=True)
+            
+            timestamp = int(time.time())
+            original_path = os.path.join(debug_dir, f'player_stack_roi_{timestamp}.png')
+            preprocessed_path = os.path.join(debug_dir, f'player_stack_preprocessed_{timestamp}.png')
+            debug_path = os.path.join(debug_dir, f'player_stack_debug_{timestamp}.png')
+            
+            cv2.imwrite(original_path, roi)
+            cv2.imwrite(preprocessed_path, preprocessed)
+            
+            # Add OCR results to the debug image
+            cv2.rectangle(debug_img, (10, 10), (350, 80), (0, 0, 0), -1)  # Black background for text
+            cv2.putText(debug_img, f"OCR Text: '{text}'", (20, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            cv2.putText(debug_img, f"Parsed Value: ${stack_amount:.2f}", (20, 60), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
+            
+            # Save the full debug image
+            cv2.imwrite(debug_path, debug_img)
+            logger.info(f"[STACK DEBUG] Saved debug images to {debug_dir}")
             
             # If no stack was detected or the value is unreasonably small,
             # use a default value (this should be configured)
             if stack_amount <= 0:
-                logger.debug("Could not detect player stack, using default value")
+                logger.debug("[STACK DEBUG] Could not detect player stack, using default value")
                 return self.config.get('default_stack', 100.0)
                 
-            logger.info(f"Detected player stack: ${stack_amount:.2f}")
-            
-            # Save debug image
-            if self.debug_mode and time.time() - self.last_debug_time > 30:
-                debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
-                os.makedirs(debug_dir, exist_ok=True)
-                
-                debug_path = os.path.join(debug_dir, f'player_stack_{int(time.time())}.png')
-                cv2.imwrite(debug_path, roi)
-                logger.info(f"Saved player stack debug image to {debug_path}")
-                
+            logger.info(f"[STACK DEBUG] Detected player stack: ${stack_amount:.2f}")
             return stack_amount
                 
         except Exception as e:
@@ -1643,6 +1748,14 @@ class GameStateDetector:
             
             # Define region where action buttons are typically located
             # Usually at the bottom of the screen
+
+            # For bærbar
+            # roi_x = int(w * 0.3)
+            # roi_y = int(h * 0.8)
+            # roi_w = int(w * 0.4)
+            # roi_h = int(h * 0.15)            
+            
+            # For stasjonær
             roi_x = int(w * 0.3)
             roi_y = int(h * 0.8)
             roi_w = int(w * 0.4)
@@ -1654,14 +1767,18 @@ class GameStateDetector:
             # Convert to HSV for better color detection
             hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
             
-            # MODIFIED: Focus only on blue buttons since all buttons in the client are blue
-            # Use a wider range for blue to ensure detection
-            lower_blue = np.array([90, 40, 40])  # Slightly expanded range
-            upper_blue = np.array([150, 255, 255])  # Slightly expanded range
+            # Detect blue buttons
+            lower_blue = np.array([90, 40, 40])
+            upper_blue = np.array([150, 255, 255])
             blue_mask = cv2.inRange(hsv_roi, lower_blue, upper_blue)
             
-            # Use only blue mask for buttons
-            combined_mask = blue_mask
+            # Detect yellow buttons - adding support for yellow buttons
+            lower_yellow = np.array([20, 100, 100])
+            upper_yellow = np.array([40, 255, 255])
+            yellow_mask = cv2.inRange(hsv_roi, lower_yellow, upper_yellow)
+            
+            # Combine blue and yellow masks
+            combined_mask = cv2.bitwise_or(blue_mask, yellow_mask)
             
             # Find contours of potential buttons
             contours, _ = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
