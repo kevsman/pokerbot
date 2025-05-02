@@ -127,6 +127,9 @@ class HandAnalyzer:
             return self._evaluate_hole_cards(player_cards)
             
         try:
+            # Validate the detected cards before evaluation
+            self._validate_cards(player_cards + community_cards)
+            
             # Convert string format to pypokerengine Card objects using gen_cards
             hole_cards = gen_cards(player_cards)
             community_cards_obj = gen_cards(community_cards)
@@ -134,41 +137,121 @@ class HandAnalyzer:
             # Use HandEvaluator to get the score
             score = HandEvaluator.eval_hand(hole_cards, community_cards_obj)
             
-            # Map the score to a strength between 0 and 1
+            # Log the raw score for debugging
+            logger.debug(f"Raw hand evaluation score: {score}")
+            
+            # Map the score to a hand type and strength between 0 and 1
             # PyPokerEngine scores range from high card (1) to straight flush (8000+)
-            # We'll normalize to 0-1 scale
-            if score >= 8000:  # Straight flush
+            if score >= 8000 and self._can_form_straight_flush(player_cards, community_cards):  
+                # Straight flush - extra validation to ensure it's real
                 hand_type = "straight flush"
                 hand_strength = 1.0
-            elif score >= 7000:  # Four of a kind
+            elif score >= 7000 and self._can_form_four_of_a_kind(player_cards, community_cards):  
+                # Four of a kind - with extra validation
                 hand_type = "four of a kind"
                 hand_strength = 0.9
-            elif score >= 6000:  # Full house
+            elif score >= 6000 and self._can_form_full_house(player_cards, community_cards):  
+                # Full house - with extra validation
                 hand_type = "full house" 
                 hand_strength = 0.8
-            elif score >= 5000:  # Flush
+            elif score >= 5000 and self._can_form_flush(player_cards, community_cards):  
+                # Flush - with extra validation
                 hand_type = "flush"
                 hand_strength = 0.7
-            elif score >= 4000:  # Straight
+            elif score >= 4000 and self._can_form_straight(player_cards, community_cards):  
+                # Straight - with extra validation
                 hand_type = "straight"
                 hand_strength = 0.6
-            elif score >= 3000:  # Three of a kind
+            elif score >= 3000 and self._can_form_three_of_a_kind(player_cards, community_cards):  
+                # Three of a kind - with extra validation
                 hand_type = "three of a kind"
                 hand_strength = 0.5
-            elif score >= 2000:  # Two pair
+            elif score >= 2000 and self._can_form_two_pair(player_cards, community_cards):  
+                # Two pair - with extra validation
                 hand_type = "two pair"
                 hand_strength = 0.4
-            elif score >= 1000:  # Pair
+            elif score >= 1000 and self._can_form_pair(player_cards, community_cards):  
+                # Pair - with extra validation
                 hand_type = "pair"
                 hand_strength = 0.3
             else:  # High card
                 hand_type = "high card"
                 hand_strength = 0.1 + (score / 1000.0) * 0.2  # Scale from 0.1 to 0.3
             
+            # Double-check hand evaluation for common mistakes
+            self._verify_hand_evaluation(player_cards, community_cards, hand_type)
+            
+            # Log the identified hand for debugging
+            logger.debug(f"Identified hand: {hand_type} with strength {hand_strength}")
+            
             return hand_type, hand_strength
         except Exception as e:
             logger.exception(f"Error calculating hand strength: {e}")
             return "error", 0.0
+    
+    def _validate_cards(self, cards):
+        """
+        Validate the cards to ensure they're legitimate.
+        
+        Args:
+            cards (List[str]): List of cards to validate
+        """
+        valid_ranks = {'2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'}
+        valid_suits = {'H', 'D', 'C', 'S'}
+        
+        # Check that each card has a valid rank and suit
+        for card in cards:
+            if len(card) != 2 or card[0] not in valid_suits or card[1] not in valid_ranks:
+                logger.warning(f"Invalid card detected: {card}")
+                
+        # Check for duplicates
+        if len(cards) != len(set(cards)):
+            duplicates = [card for card in cards if cards.count(card) > 1]
+            logger.warning(f"Duplicate cards detected: {duplicates}")
+            
+    def _can_form_straight_flush(self, player_cards, community_cards):
+        """
+        Check if it's possible to form a straight flush with the given cards.
+        
+        Args:
+            player_cards (List[str]): Player hole cards
+            community_cards (List[str]): Community cards
+            
+        Returns:
+            bool: True if a straight flush is possible, False otherwise
+        """
+        all_cards = player_cards + community_cards
+        
+        # We need at least 5 cards total to form a straight flush
+        if len(all_cards) < 5:
+            return False
+            
+        # Group cards by suit
+        cards_by_suit = {'H': [], 'D': [], 'C': [], 'S': []}
+        
+        for card in all_cards:
+            suit = card[0]
+            rank = card[1]
+            cards_by_suit[suit].append(rank)
+            
+        # Check if any suit has at least 5 cards
+        for suit, ranks in cards_by_suit.items():
+            if len(ranks) >= 5:
+                # Convert ranks to numerical values
+                rank_values = [self._get_rank_value(rank) for rank in ranks]
+                rank_values.sort()
+                
+                # Check for straight (5 consecutive values)
+                # Special case for A-5 straight (A can be low)
+                if 14 in rank_values:  # Ace
+                    rank_values.append(1)  # Add low ace
+                
+                # Check for 5 consecutive cards
+                for i in range(len(rank_values) - 4):
+                    if rank_values[i:i+5] == list(range(rank_values[i], rank_values[i] + 5)):
+                        return True
+                        
+        return False
     
     def _evaluate_hole_cards(self, player_cards):
         """
@@ -259,7 +342,7 @@ class HandAnalyzer:
         
         # If we have a hand strength, use it as a starting point
         if player_cards:
-            _, hand_strength = self._calculate_hand_strength(player_cards, community_cards)
+            hand_type, hand_strength = self._calculate_hand_strength(player_cards, community_cards)
             
             # Adjust based on position
             position_factor = 0.0
@@ -277,8 +360,293 @@ class HandAnalyzer:
             # Adjust for number of community cards (more uncertainty with fewer cards)
             uncertainty_factor = max(0, (5 - len(community_cards)) * 0.05)
             
-            # Combine factors
-            win_prob = max(0, min(1, hand_strength - uncertainty_factor + position_factor))
+            # For straight flush, be more conservative with win probability estimate
+            # A straight flush is extremely rare and often overestimated
+            if hand_type == "straight flush":
+                # More realistic win probability, especially with fewer community cards
+                base_prob = 0.85  # High but not guaranteed
+                card_count_factor = min(1.0, len(community_cards) / 5)  # Scale by number of community cards
+                win_prob = base_prob * card_count_factor
+            else:
+                # Combine factors for other hand types
+                win_prob = max(0, min(1, hand_strength - uncertainty_factor + position_factor))
+                
             return win_prob
             
         return 0.0
+
+    def _verify_hand_evaluation(self, player_cards, community_cards, hand_type):
+        """
+        Double-check the hand evaluation for common mistakes.
+        
+        Args:
+            player_cards (List[str]): Player hole cards
+            community_cards (List[str]): Community cards
+            hand_type (str): Currently identified hand type
+        """
+        # Special validation for straight flush which is being incorrectly detected
+        if hand_type == "straight flush":
+            all_cards = player_cards + community_cards
+            
+            # Check if we have the minimum necessary cards
+            if len(all_cards) < 5:
+                logger.warning("Hand incorrectly identified as straight flush with fewer than 5 cards")
+                return
+            
+            # Detailed logging for debugging straight flush detection
+            logger.debug(f"Verifying straight flush: player cards {player_cards}, community cards {community_cards}")
+            
+            # Count cards by suit
+            suits_count = {'H': 0, 'D': 0, 'C': 0, 'S': 0}
+            for card in all_cards:
+                suits_count[card[0]] += 1
+            
+            # Check if any suit has at least 5 cards
+            has_five_of_same_suit = any(count >= 5 for count in suits_count.values())
+            
+            if not has_five_of_same_suit:
+                logger.warning(f"Hand incorrectly identified as straight flush: no suit has 5+ cards. Suits count: {suits_count}")
+                
+            # For debugging, log which suit appeared to form the straight flush
+            for suit, count in suits_count.items():
+                if count >= 5:
+                    cards_of_suit = [card for card in all_cards if card[0] == suit]
+                    ranks = [card[1] for card in cards_of_suit]
+                    rank_values = [self._get_rank_value(rank) for rank in ranks]
+                    rank_values.sort()
+                    logger.debug(f"Potential straight flush with {suit}: {cards_of_suit}, rank values: {rank_values}")
+                    
+                    # Check for 5 consecutive cards
+                    has_straight = False
+                    if 14 in rank_values:  # Ace
+                        # Also consider Ace as 1 for A-5 straight
+                        rank_values.append(1)
+                        
+                    for i in range(len(rank_values) - 4):
+                        if rank_values[i:i+5] == list(range(rank_values[i], rank_values[i] + 5)):
+                            has_straight = True
+                            logger.debug(f"Found straight in suit {suit}: {rank_values[i:i+5]}")
+                            break
+                            
+                    if not has_straight:
+                        logger.warning(f"Hand incorrectly identified as straight flush: cards of suit {suit} don't form a straight")
+                        
+    def _can_form_four_of_a_kind(self, player_cards, community_cards):
+        """
+        Check if it's possible to form four of a kind with the given cards.
+        
+        Args:
+            player_cards (List[str]): Player hole cards
+            community_cards (List[str]): Community cards
+            
+        Returns:
+            bool: True if four of a kind is possible, False otherwise
+        """
+        all_cards = player_cards + community_cards
+        
+        # We need at least 4 cards total to form four of a kind
+        if len(all_cards) < 4:
+            logger.warning(f"Cannot form four of a kind with only {len(all_cards)} cards")
+            return False
+            
+        # Count occurrences of each rank
+        rank_counts = {}
+        for card in all_cards:
+            rank = card[1]
+            if rank not in rank_counts:
+                rank_counts[rank] = 0
+            rank_counts[rank] += 1
+            
+        # Check if any rank appears exactly 4 times
+        has_four = any(count >= 4 for count in rank_counts.values())
+        
+        if not has_four:
+            logger.warning(f"Hand incorrectly identified as four of a kind. Rank distribution: {rank_counts}")
+            
+        return has_four
+        
+    def _can_form_full_house(self, player_cards, community_cards):
+        """
+        Check if it's possible to form a full house with the given cards.
+        
+        Args:
+            player_cards (List[str]): Player hole cards
+            community_cards (List[str]): Community cards
+            
+        Returns:
+            bool: True if a full house is possible, False otherwise
+        """
+        all_cards = player_cards + community_cards
+        
+        # We need at least 5 cards total to form a full house
+        if len(all_cards) < 5:
+            return False
+            
+        # Count occurrences of each rank
+        rank_counts = {}
+        for card in all_cards:
+            rank = card[1]
+            if rank not in rank_counts:
+                rank_counts[rank] = 0
+            rank_counts[rank] += 1
+            
+        # Sort ranks by count (descending)
+        sorted_counts = sorted(rank_counts.values(), reverse=True)
+        
+        # For a full house, we need at least one rank with 3+ cards and another with 2+ cards
+        if len(sorted_counts) >= 2 and sorted_counts[0] >= 3 and sorted_counts[1] >= 2:
+            return True
+            
+        return False
+        
+    def _can_form_flush(self, player_cards, community_cards):
+        """
+        Check if it's possible to form a flush with the given cards.
+        
+        Args:
+            player_cards (List[str]): Player hole cards
+            community_cards (List[str]): Community cards
+            
+        Returns:
+            bool: True if a flush is possible, False otherwise
+        """
+        all_cards = player_cards + community_cards
+        
+        # We need at least 5 cards total to form a flush
+        if len(all_cards) < 5:
+            return False
+            
+        # Count occurrences of each suit
+        suit_counts = {'H': 0, 'D': 0, 'C': 0, 'S': 0}
+        for card in all_cards:
+            suit = card[0]
+            suit_counts[suit] += 1
+            
+        # Check if any suit appears at least 5 times
+        has_flush = any(count >= 5 for count in suit_counts.values())
+        
+        return has_flush
+        
+    def _can_form_straight(self, player_cards, community_cards):
+        """
+        Check if it's possible to form a straight with the given cards.
+        
+        Args:
+            player_cards (List[str]): Player hole cards
+            community_cards (List[str]): Community cards
+            
+        Returns:
+            bool: True if a straight is possible, False otherwise
+        """
+        all_cards = player_cards + community_cards
+        
+        # We need at least 5 cards total to form a straight
+        if len(all_cards) < 5:
+            return False
+            
+        # Get unique ranks as values
+        rank_values = set(self._get_rank_value(card[1]) for card in all_cards)
+        
+        # Special case for A-5 straight
+        if 14 in rank_values:  # Ace
+            rank_values.add(1)  # Add Ace as 1
+            
+        # Sort rank values
+        rank_values = sorted(rank_values)
+        
+        # Check for 5 consecutive ranks
+        for i in range(len(rank_values) - 4):
+            if rank_values[i:i+5] == list(range(rank_values[i], rank_values[i] + 5)):
+                return True
+                
+        return False
+        
+    def _can_form_three_of_a_kind(self, player_cards, community_cards):
+        """
+        Check if it's possible to form three of a kind with the given cards.
+        
+        Args:
+            player_cards (List[str]): Player hole cards
+            community_cards (List[str]): Community cards
+            
+        Returns:
+            bool: True if three of a kind is possible, False otherwise
+        """
+        all_cards = player_cards + community_cards
+        
+        # We need at least 3 cards total to form three of a kind
+        if len(all_cards) < 3:
+            return False
+            
+        # Count occurrences of each rank
+        rank_counts = {}
+        for card in all_cards:
+            rank = card[1]
+            if rank not in rank_counts:
+                rank_counts[rank] = 0
+            rank_counts[rank] += 1
+            
+        # Check if any rank appears at least 3 times
+        has_three = any(count >= 3 for count in rank_counts.values())
+        
+        return has_three
+        
+    def _can_form_two_pair(self, player_cards, community_cards):
+        """
+        Check if it's possible to form two pairs with the given cards.
+        
+        Args:
+            player_cards (List[str]): Player hole cards
+            community_cards (List[str]): Community cards
+            
+        Returns:
+            bool: True if two pairs are possible, False otherwise
+        """
+        all_cards = player_cards + community_cards
+        
+        # We need at least 4 cards total to form two pairs
+        if len(all_cards) < 4:
+            return False
+            
+        # Count occurrences of each rank
+        rank_counts = {}
+        for card in all_cards:
+            rank = card[1]
+            if rank not in rank_counts:
+                rank_counts[rank] = 0
+            rank_counts[rank] += 1
+            
+        # Count how many pairs we have
+        pairs = sum(1 for count in rank_counts.values() if count >= 2)
+        
+        return pairs >= 2
+        
+    def _can_form_pair(self, player_cards, community_cards):
+        """
+        Check if it's possible to form a pair with the given cards.
+        
+        Args:
+            player_cards (List[str]): Player hole cards
+            community_cards (List[str]): Community cards
+            
+        Returns:
+            bool: True if a pair is possible, False otherwise
+        """
+        all_cards = player_cards + community_cards
+        
+        # We need at least 2 cards total to form a pair
+        if len(all_cards) < 2:
+            return False
+            
+        # Count occurrences of each rank
+        rank_counts = {}
+        for card in all_cards:
+            rank = card[1]
+            if rank not in rank_counts:
+                rank_counts[rank] = 0
+            rank_counts[rank] += 1
+            
+        # Check if any rank appears at least twice
+        has_pair = any(count >= 2 for count in rank_counts.values())
+        
+        return has_pair

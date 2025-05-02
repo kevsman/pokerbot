@@ -80,18 +80,24 @@ class BetPlacer:
         except Exception as e:
             logger.exception(f"Error loading client templates: {e}")
     
-    def execute_action(self, decision: Decision) -> bool:
+    def execute_action(self, decision: Decision, is_our_turn: bool = False) -> bool:
         """
         Execute a poker action based on the decision.
         
         Args:
             decision (Decision): The decision to execute
+            is_our_turn (bool): Whether it's our turn to act or not
             
         Returns:
             bool: True if action was executed successfully, False otherwise
         """
         try:
             logger.info(f"Executing action: {decision}")
+            
+            # Skip execution if it's not our turn
+            if not is_our_turn:
+                logger.warning("Skipping action execution - not our turn")
+                return False
             
             # Safety timeout before any action
             time.sleep(self.safety_timeout)

@@ -83,13 +83,18 @@ class GameStateDetector:
         self.load_templates()
         # Lower the match threshold for better detection
         self.match_threshold = 0.6  # Changed from 0.7 to 0.6
-        self.debug_mode = True  # Enable debug mode to log more information
+        # Enable debug mode unless concise_logging is set to True in config
+        self.debug_mode = not self.config.get('concise_logging', False)
         self.last_debug_time = 0  # To limit debug image saving frequency
         self.use_window_detection = config.get('use_window_detection', WINDOW_DETECTION_AVAILABLE)
         self.target_window_title = config.get('window_title', None)
         logger.info("Game state detector initialized")
         if self.use_window_detection:
             logger.info("Window title detection is enabled")
+        if self.debug_mode:
+            logger.info("Debug mode is enabled - will save debug images")
+        else:
+            logger.info("Debug mode is disabled - will not save debug images")
         
     def load_templates(self):
         """Load card and button templates from resources directory."""
@@ -430,28 +435,71 @@ class GameStateDetector:
                             # Display the rank and suit on the debug image
                             # Convert suit symbol to text representation for display
                             suit_text = suit
-                            if suit == 'h': suit_text = "♥"  # hearts
-                            elif suit == 'd': suit_text = "♦"  # diamonds
-                            elif suit == 'c': suit_text = "♣"  # clubs
-                            elif suit == 's': suit_text = "♠"  # spades
+                            suit_color = (0, 0, 0)  # Default black
                             
-                            # Draw rank and suit text at a position below the card rectangle
+                            if suit == 'h': 
+                                suit_text = "♥"  # hearts
+                                suit_color = (0, 0, 255)  # Red
+                            elif suit == 'd': 
+                                suit_text = "♦"  # diamonds
+                                suit_color = (0, 0, 255)  # Red
+                            elif suit == 'c': 
+                                suit_text = "♣"  # clubs
+                                suit_color = (0, 0, 0)  # Black
+                            elif suit == 's': 
+                                suit_text = "♠"  # spades
+                                suit_color = (0, 0, 0)  # Black
+                            
+                            # Draw the card value with a bold, clearly visible font
                             card_text = f"{rank}{suit_text}"
                             text_x = x + roi_x + 5
                             text_y = y + roi_y + h + 20  # Position below the card
                             
-                            # Draw the card value with a bold, clearly visible font
-                            # First draw a black background for better visibility
-                            cv2.putText(debug_img, card_text, (text_x, text_y), 
-                                      cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 4)
+                            # Draw background for better visibility
+                            text_size = cv2.getTextSize(card_text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)[0]
+                            cv2.rectangle(debug_img, 
+                                         (text_x - 5, text_y - text_size[1] - 5), 
+                                         (text_x + text_size[0] + 5, text_y + 5), 
+                                         (255, 255, 255), -1)
                             
-                            # Then overlay the text with color based on suit
-                            if suit in ['h', 'd']:  # Red for hearts and diamonds
-                                cv2.putText(debug_img, card_text, (text_x, text_y), 
-                                          cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                            else:  # Black for clubs and spades
-                                cv2.putText(debug_img, card_text, (text_x, text_y), 
-                                          cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                            # Draw the text
+                            cv2.putText(debug_img, card_text, (text_x, text_y), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.8, suit_color, 2)
+                                      
+                            # Draw a larger suit symbol for better visibility
+                            symbol_x = x + roi_x + w//2
+                            symbol_y = y + roi_y + h + 50
+                            
+                            # Draw large suit symbol
+                            if suit == 'h':  # Heart
+                                # Draw heart shape
+                                pts = np.array([[symbol_x, symbol_y-15], 
+                                              [symbol_x-10, symbol_y], 
+                                              [symbol_x, symbol_y+15], 
+                                              [symbol_x+10, symbol_y]])
+                                cv2.fillPoly(debug_img, [pts], (0, 0, 255))
+                            elif suit == 'd':  # Diamond
+                                # Draw diamond shape
+                                pts = np.array([[symbol_x, symbol_y-15], 
+                                              [symbol_x-10, symbol_y], 
+                                              [symbol_x, symbol_y+15], 
+                                              [symbol_x+10, symbol_y]])
+                                cv2.fillPoly(debug_img, [pts], (0, 0, 255))
+                            elif suit == 'c':  # Club
+                                # Draw club shape (simplified)
+                                cv2.circle(debug_img, (symbol_x-5, symbol_y-5), 6, (0, 0, 0), -1)
+                                cv2.circle(debug_img, (symbol_x+5, symbol_y-5), 6, (0, 0, 0), -1)
+                                cv2.circle(debug_img, (symbol_x, symbol_y+2), 6, (0, 0, 0), -1)
+                                cv2.rectangle(debug_img, (symbol_x-2, symbol_y), (symbol_x+2, symbol_y+12), (0, 0, 0), -1)
+                            elif suit == 's':  # Spade
+                                # Draw spade shape
+                                pts = np.array([[symbol_x, symbol_y-15], 
+                                              [symbol_x-10, symbol_y], 
+                                              [symbol_x, symbol_y+5], 
+                                              [symbol_x+10, symbol_y]])
+                                cv2.fillPoly(debug_img, [pts], (0, 0, 0))
+                                # Add stem
+                                cv2.rectangle(debug_img, (symbol_x-2, symbol_y+5), (symbol_x+2, symbol_y+15), (0, 0, 0), -1)
                         else:
                             logger.info(f"[CARD DEBUG] Failed to identify card rank/suit")
                             # Display that the card couldn't be identified
@@ -508,7 +556,6 @@ class GameStateDetector:
             # Enhanced color analysis for suits
             # Convert to multiple color spaces for better analysis
             hsv_corner = cv2.cvtColor(corner, cv2.COLOR_BGR2HSV)
-            lab_corner = cv2.cvtColor(corner, cv2.COLOR_BGR2LAB)
             
             # Red detection (for hearts and diamonds) with improved thresholds
             # In HSV, red is at both ends of the hue spectrum
@@ -557,8 +604,8 @@ class GameStateDetector:
                 cv2.imwrite(os.path.join(debug_dir, f'rank_thresh_{int(time.time())}.png'), thresh)
             
             # Use tesseract with specific configurations for card rank detection
-            # Use --psm 10 for single character recognition
-            rank_config = r'--psm 10 -c tessedit_char_whitelist=23456789TJQKA'
+            # Use --psm 8 for single character recognition and an improved whitelist
+            rank_config = r'--psm 8 -c tessedit_char_whitelist=23456789TJQKA10'
             detected_text = pytesseract.image_to_string(thresh, config=rank_config).strip()
             
             # Improved mapping of OCR results to card ranks
@@ -567,7 +614,10 @@ class GameStateDetector:
                 '8': '8', '9': '9', '1': '10', 'T': '10', 'J': 'J', 
                 'Q': 'Q', 'K': 'K', 'A': 'A', 'l': '1', 'I': '1',
                 'O': '10', 'o': '10', '0': '10', 'L': 'J', 'Z': '2',
-                't': '10', 'i': '1', '!': '1', '[': 'J', ']': 'J'
+                't': '10', 'i': '1', '!': '1', '[': 'J', ']': 'J',
+                # Added common misidentifications
+                'S': '5', 'B': '8', 'G': '6', 'g': '9',
+                'U': 'J', 'V': 'A', 'Y': 'A'
             }
             
             # Process OCR text for rank
@@ -590,23 +640,26 @@ class GameStateDetector:
                     if detected_text[:2] in ['10', '1O', 'IO', 'To', 'T0']:
                         rank = '10'
             
-            # If OCR failed, try an alternative approach with template matching or shape analysis
+            # If OCR failed, try an alternative approach with shape analysis
             if not rank and corner_h > 10 and corner_w > 10:
                 # Focus on the very top-left where rank is typically located
                 rank_roi = corner[0:min(20, corner_h), 0:min(20, corner_w)]
-                # Check for characteristic shapes of specific ranks
-                # For example, "A" typically has a triangular shape at the top
+                
+                # Try multiple shape detection methods
                 if self._check_for_A_shape(rank_roi):
                     rank = 'A'
-                # K typically has strong vertical lines
                 elif self._check_for_K_shape(rank_roi):
                     rank = 'K'
-                # Q typically has a curved shape
                 elif self._check_for_Q_shape(rank_roi):
                     rank = 'Q'
-                # J typically has a hook at the bottom
                 elif self._check_for_J_shape(rank_roi):
                     rank = 'J'
+                elif self._check_for_9_shape(rank_roi):
+                    rank = '9'
+            
+            # Use a pattern-based approach as a last resort
+            if not rank:
+                rank = self._rank_by_pattern_matching(thresh)
             
             # Determine suit based on shape analysis, not just color
             suit = None
@@ -674,7 +727,86 @@ class GameStateDetector:
         except Exception as e:
             logger.exception(f"Error identifying card: {e}")
             return None, None
-    
+            
+    def _rank_by_pattern_matching(self, img):
+        """Try to identify a card rank by its pattern of white pixels."""
+        h, w = img.shape[:2]
+        
+        # Count white pixels in different regions
+        top_left = cv2.countNonZero(img[0:h//3, 0:w//3])
+        top_middle = cv2.countNonZero(img[0:h//3, w//3:2*w//3])
+        top_right = cv2.countNonZero(img[0:h//3, 2*w//3:w])
+        
+        middle_left = cv2.countNonZero(img[h//3:2*h//3, 0:w//3])
+        middle_middle = cv2.countNonZero(img[h//3:2*h//3, w//3:2*w//3])
+        middle_right = cv2.countNonZero(img[h//3:2*h//3, 2*w//3:w])
+        
+        bottom_left = cv2.countNonZero(img[2*h//3:h, 0:w//3])
+        bottom_middle = cv2.countNonZero(img[2*h//3:h, w//3:2*w//3])
+        bottom_right = cv2.countNonZero(img[2*h//3:h, 2*w//3:w])
+        
+        # Very simplified pattern recognition based on the distribution of white pixels
+        total_pixels = top_left + top_middle + top_right + middle_left + middle_middle + middle_right + bottom_left + bottom_middle + bottom_right
+        if total_pixels < 10:  # Too few pixels to classify
+            return None
+            
+        # A very rough estimation based on typical card rank shapes
+        if top_middle > top_left and top_middle > top_right and bottom_middle > bottom_left and bottom_middle > bottom_right:
+            # Central vertical line pattern suggests 1 or T
+            return '10'
+        elif top_left > top_right and bottom_right > bottom_left:
+            # Diagonal pattern may suggest K
+            return 'K'
+        elif top_left > 0 and top_right > 0 and bottom_middle > 0:
+            # U shape pattern suggests J
+            return 'J'
+        elif (top_left > 0 and top_right > 0 and 
+              middle_left > 0 and middle_right > 0 and 
+              bottom_left > 0 and bottom_right > 0):
+            # O shape pattern suggests Q or 0
+            return 'Q'
+        elif top_middle > 0 and middle_middle > 0 and bottom_left > 0 and bottom_right > 0:
+            # Top vertical with bottom horizontals suggests A
+            return 'A'
+        else:
+            return None
+            
+    def _check_for_9_shape(self, img):
+        """Check for '9' characteristic shape (circle with tail)"""
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, binary = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY_INV)
+        
+        h, w = binary.shape
+        if h < 10 or w < 10:
+            return False
+            
+        # 9 typically has a circular top part
+        top_half = binary[0:h//2, :]
+        contours, _ = cv2.findContours(top_half, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        has_circle = False
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area < 5:  # Ignore tiny contours
+                continue
+                
+            perimeter = cv2.arcLength(cnt, True)
+            circularity = 4 * np.pi * area / (perimeter * perimeter) if perimeter > 0 else 0
+            
+            if circularity > 0.4:  # Circle-like shape
+                has_circle = True
+                break
+                
+        # Check for tail in bottom right
+        bottom_right = binary[h//2:h, w//2:w]
+        bottom_right_pixels = cv2.countNonZero(bottom_right)
+        
+        # Characteristic of '9': circle top and tail at bottom
+        if has_circle and bottom_right_pixels > 2:
+            return True
+            
+        return False
+        
     def _check_for_A_shape(self, img):
         """Check for 'A' characteristic shape (a peak with diverging lines)"""
         # Convert to binary
@@ -734,16 +866,26 @@ class GameStateDetector:
         h, w = binary.shape
         if h < 10 or w < 10:
             return False
-            
-        # 'Q' typically has a circular pattern in the top
-        top = binary[0:3*h//4, :]
         
-        # And a diagonal tail in the bottom right
-        bottom_right = binary[3*h//4:h, w//2:w]
+        # 'Q' typically has a circular pattern in the top and middle
+        top_and_middle = binary[0:3*h//4, :]
+        
+        # And a distinct diagonal tail specifically in the bottom right
+        bottom_right = binary[2*h//3:h, 2*w//3:w]
         bottom_right_pixels = cv2.countNonZero(bottom_right)
         
-        # Check for circle-like contour
-        contours, _ = cv2.findContours(top, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Check middle left and right for O-like shape (should have pixels on both sides)
+        middle_left = binary[h//4:3*h//4, 0:w//3]
+        middle_right = binary[h//4:3*h//4, 2*w//3:w]
+        middle_left_pixels = cv2.countNonZero(middle_left)
+        middle_right_pixels = cv2.countNonZero(middle_right)
+        
+        # Q-specific: Should have a gap in the middle center (open circle) 
+        # and pixels on both left and right sides
+        has_side_pixels = middle_left_pixels > 3 and middle_right_pixels > 3
+        
+        # Check for circle-like contour in top and middle area
+        contours, _ = cv2.findContours(top_and_middle, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         for cnt in contours:
             # Check if contour is approximately circular
@@ -754,8 +896,9 @@ class GameStateDetector:
             perimeter = cv2.arcLength(cnt, True)
             circularity = 4 * np.pi * area / (perimeter * perimeter) if perimeter > 0 else 0
             
-            # 'Q' shape: circular top and diagonal in bottom right
-            if circularity > 0.4 and bottom_right_pixels > 2:
+            # 'Q' shape: circular top and middle, plus diagonal tail in bottom right
+            # Must have side pixels on both left and right in middle region to be "O"-like
+            if circularity > 0.5 and bottom_right_pixels > 2 and has_side_pixels:
                 return True
                 
         return False
@@ -795,22 +938,29 @@ class GameStateDetector:
             if len(cnt) < 5:
                 continue
                 
-            # Check for pointed bottom
-            bottom_y = np.max(cnt[:, :, 1])
-            bottom_points = cnt[cnt[:, :, 1] >= bottom_y - 2]
-            
-            # A pointed bottom will have relatively few points at the max y-coordinate
-            if len(bottom_points) < 5:
-                score += 5
-            
-            # Check for two bumps at top
-            hull = cv2.convexHull(cnt)
-            hull_area = cv2.contourArea(hull)
-            cnt_area = cv2.contourArea(cnt)
-            
-            # Hearts have concavities, so contour area is significantly less than hull area
-            if cnt_area > 0 and hull_area / cnt_area > 1.2:
-                score += 10
+            try:
+                # Check for pointed bottom - safely extract y coordinates
+                cnt_reshaped = cnt.reshape(-1, 2)  # Reshape to 2D array of [x,y] coordinates
+                y_coords = cnt_reshaped[:, 1]      # Get all y coordinates
+                bottom_y = np.max(y_coords)
+                
+                # Find points near the bottom
+                bottom_points = cnt_reshaped[y_coords >= bottom_y - 2]
+                
+                # A pointed bottom will have relatively few points at the max y-coordinate
+                if len(bottom_points) < 5:
+                    score += 5
+                
+                # Check for two bumps at top using convexity defects
+                hull = cv2.convexHull(cnt)
+                hull_area = cv2.contourArea(hull)
+                cnt_area = cv2.contourArea(cnt)
+                
+                # Hearts have concavities, so contour area is significantly less than hull area
+                if cnt_area > 0 and hull_area / cnt_area > 1.2:
+                    score += 10
+            except Exception as e:
+                logger.debug(f"Error in heart shape detection: {e}")
                 
         return score
         
@@ -828,17 +978,20 @@ class GameStateDetector:
             if len(cnt) < 5:
                 continue
                 
-            # Check for polygon approximation with 4 points (square/diamond)
-            epsilon = 0.04 * cv2.arcLength(cnt, True)
-            approx = cv2.approxPolyDP(cnt, epsilon, True)
-            
-            if len(approx) == 4:
-                score += 15  # Strong indicator of diamond
-            
-            # Check if width/height ratio is close to 1 (diamond is typically symmetric)
-            x, y, w, h = cv2.boundingRect(cnt)
-            if 0.7 < w/h < 1.3:
-                score += 5
+            try:
+                # Check for polygon approximation with 4 points (square/diamond)
+                epsilon = 0.04 * cv2.arcLength(cnt, True)
+                approx = cv2.approxPolyDP(cnt, epsilon, True)
+                
+                if len(approx) == 4:
+                    score += 15  # Strong indicator of diamond
+                
+                # Check if width/height ratio is close to 1 (diamond is typically symmetric)
+                x, y, w, h = cv2.boundingRect(cnt)
+                if w > 0 and h > 0 and 0.7 < w/h < 1.3:
+                    score += 5
+            except Exception as e:
+                logger.debug(f"Error in diamond shape detection: {e}")
                 
         return score
         
@@ -855,39 +1008,44 @@ class GameStateDetector:
             if len(cnt) < 5:
                 continue
                 
-            # Get the topmost point
-            topmost = tuple(cnt[cnt[:, :, 1].argmin()][0])
-            
-            # Check for triangular top
-            top_half = cnt[cnt[:, :, 1] < h//2]
-            if len(top_half) >= 3:
-                # Try to fit a triangle to top half points
-                hull = cv2.convexHull(top_half)
-                epsilon = 0.04 * cv2.arcLength(hull, True)
-                approx = cv2.approxPolyDP(hull, epsilon, True)
+            try:
+                # Reshape contour to 2D array for easier indexing
+                cnt_reshaped = cnt.reshape(-1, 2)
                 
-                if len(approx) == 3:
-                    score += 10  # Strong indicator of spade
+                # Get the topmost point - find the minimum y-coordinate
+                y_coords = cnt_reshaped[:, 1]
+                topmost_idx = np.argmin(y_coords)
+                topmost = tuple(cnt_reshaped[topmost_idx])
+                
+                # Check for triangular top
+                # Get points in the top half
+                top_half_indices = np.where(cnt_reshaped[:, 1] < h//2)[0]
+                if len(top_half_indices) >= 3:
+                    top_half = cnt_reshaped[top_half_indices]
                     
-            # Check for narrow stem at bottom
-            bottom_part = cnt[cnt[:, :, 1] > 2*h//3]
-            if len(bottom_part) > 0:
-                # We need to check the dimensionality of bottom_part first
-                try:
-                    # For 3D array structure (typical contour points format)
-                    if bottom_part.ndim == 3:
-                        x_coords = bottom_part[:, 0, 0]  # Extract first coordinate (x) from each point
-                        bottom_width = np.max(x_coords) - np.min(x_coords)
-                    # For 2D array structure 
-                    else:
-                        x_coords = [point[0] for point in bottom_part]  # Extract x coordinate from each point
-                        bottom_width = max(x_coords) - min(x_coords)
+                    # Try to fit a triangle to top half points
+                    top_hull = cv2.convexHull(top_half.reshape(-1, 1, 2))
+                    epsilon = 0.04 * cv2.arcLength(top_hull, True)
+                    approx = cv2.approxPolyDP(top_hull, epsilon, True)
+                    
+                    if len(approx) == 3:
+                        score += 10  # Strong indicator of spade
                         
-                    if bottom_width < w//2:
-                        score += 5  # Narrow stem is typical for spades
-                except (IndexError, ValueError, AttributeError) as e:
-                    # If we can't process the coordinates, log and continue
-                    logger.debug(f"Could not process contour points: {e}")
+                # Check for narrow stem at bottom
+                # Get points in the bottom third
+                bottom_indices = np.where(cnt_reshaped[:, 1] > 2*h//3)[0]
+                if len(bottom_indices) > 0:
+                    bottom_part = cnt_reshaped[bottom_indices]
+                    
+                    if len(bottom_part) > 0:
+                        # Calculate width of bottom part
+                        x_coords = bottom_part[:, 0]
+                        bottom_width = np.max(x_coords) - np.min(x_coords)
+                        
+                        if bottom_width < w//2:
+                            score += 5  # Narrow stem is typical for spades
+            except Exception as e:
+                logger.debug(f"Error in spade shape detection: {e}")
                     
         return score
         
@@ -902,42 +1060,41 @@ class GameStateDetector:
         
         # First, check if there are multiple distinct contours (club lobes)
         if len(contours) >= 2:
-            score += 5
+            score += 10  # Increase the weight for multiple contours (strong club indicator)
             
         for cnt in contours:
             if len(cnt) < 5:
                 continue
                 
-            # Check if contour is approximately circular (club lobes are circular)
-            area = cv2.contourArea(cnt)
-            if area < 5:  # Ignore tiny contours
-                continue
+            try:
+                # Reshape contour to 2D array
+                cnt_reshaped = cnt.reshape(-1, 2)
                 
-            perimeter = cv2.arcLength(cnt, True)
-            circularity = 4 * np.pi * area / (perimeter * perimeter) if perimeter > 0 else 0
-            
-            if circularity > 0.6:
-                score += 10  # Strong indicator of club lobe
+                # Check if contour is approximately circular (club lobes are circular)
+                area = cv2.contourArea(cnt)
+                if area < 5:  # Ignore tiny contours
+                    continue
+                    
+                perimeter = cv2.arcLength(cnt, True)
+                circularity = 4 * np.pi * area / (perimeter * perimeter) if perimeter > 0 else 0
                 
-            # Check for small stem at bottom
-            bottom_part = cnt[cnt[:, :, 1] > 2*h//3]
-            if len(bottom_part) > 0:
-                # We need to check the dimensionality of bottom_part first
-                try:
-                    # For 3D array structure (typical contour points format)
-                    if bottom_part.ndim == 3:
-                        x_coords = bottom_part[:, 0, 0]  # Extract first coordinate (x) from each point
+                if circularity > 0.6:
+                    score += 15  # Increase weight for circular shapes (strong club indicator)
+                    
+                # Check for small stem at bottom
+                bottom_indices = np.where(cnt_reshaped[:, 1] > 2*h//3)[0]
+                if len(bottom_indices) > 0:
+                    bottom_part = cnt_reshaped[bottom_indices]
+                    
+                    if len(bottom_part) > 0:
+                        # Calculate width of bottom part
+                        x_coords = bottom_part[:, 0]
                         bottom_width = np.max(x_coords) - np.min(x_coords)
-                    # For 2D array structure 
-                    else:
-                        x_coords = [point[0] for point in bottom_part]  # Extract x coordinate from each point
-                        bottom_width = max(x_coords) - min(x_coords)
                         
-                    if bottom_width < w//3:
-                        score += 5  # Narrow stem is typical for clubs
-                except (IndexError, ValueError, AttributeError) as e:
-                    # If we can't process the coordinates, log and continue
-                    logger.debug(f"Could not process contour points: {e}")
+                        if bottom_width < w//3:
+                            score += 5  # Narrow stem is typical for clubs
+            except Exception as e:
+                logger.debug(f"Error in club shape detection: {e}")
                     
         return score
         
@@ -1497,35 +1654,14 @@ class GameStateDetector:
             # Convert to HSV for better color detection
             hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
             
-            # Detect active buttons by looking for bright, saturated colors
-            # (Poker sites typically highlight active buttons with bright colors)
-            
-            # Define color ranges for common active button colors
-            
-            # Green buttons (often used for "Call" or "Check")
-            lower_green = np.array([40, 50, 50])
-            upper_green = np.array([80, 255, 255])
-            green_mask = cv2.inRange(hsv_roi, lower_green, upper_green)
-            
-            # Red/Orange buttons (often used for "Fold")
-            lower_red1 = np.array([0, 50, 50])
-            upper_red1 = np.array([10, 255, 255])
-            lower_red2 = np.array([170, 50, 50])
-            upper_red2 = np.array([180, 255, 255])
-            red_mask = cv2.inRange(hsv_roi, lower_red1, upper_red1) | cv2.inRange(hsv_roi, lower_red2, upper_red2)
-            
-            # Blue buttons (sometimes used for "Bet" or "Raise")
-            lower_blue = np.array([100, 50, 50])
-            upper_blue = np.array([140, 255, 255])
+            # MODIFIED: Focus only on blue buttons since all buttons in the client are blue
+            # Use a wider range for blue to ensure detection
+            lower_blue = np.array([90, 40, 40])  # Slightly expanded range
+            upper_blue = np.array([150, 255, 255])  # Slightly expanded range
             blue_mask = cv2.inRange(hsv_roi, lower_blue, upper_blue)
             
-            # Yellow buttons
-            lower_yellow = np.array([20, 100, 100]) 
-            upper_yellow = np.array([40, 255, 255])
-            yellow_mask = cv2.inRange(hsv_roi, lower_yellow, upper_yellow)
-            
-            # Combine all color masks to find any active button
-            combined_mask = cv2.bitwise_or(green_mask, cv2.bitwise_or(red_mask, cv2.bitwise_or(blue_mask, yellow_mask)))
+            # Use only blue mask for buttons
+            combined_mask = blue_mask
             
             # Find contours of potential buttons
             contours, _ = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -1606,45 +1742,32 @@ class GameStateDetector:
             # Convert to HSV for better color detection
             hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
             
-            # Define color ranges for different types of buttons
-            # Red/orange buttons (often fold)
-            lower_red1 = np.array([0, 70, 50])
-            upper_red1 = np.array([10, 255, 255])
-            lower_red2 = np.array([170, 70, 50])
-            upper_red2 = np.array([180, 255, 255])
-            red_mask = cv2.inRange(hsv_roi, lower_red1, upper_red1) | cv2.inRange(hsv_roi, lower_red2, upper_red2)
-            
-            # Green buttons (often check/call)
-            lower_green = np.array([40, 40, 40])
-            upper_green = np.array([80, 255, 255])
-            green_mask = cv2.inRange(hsv_roi, lower_green, upper_green)
-            
-            # Blue buttons (often bet/raise)
-            lower_blue = np.array([100, 40, 40])
-            upper_blue = np.array([140, 255, 255])
+            # MODIFIED: Use only blue mask for all buttons since all buttons in the client are blue
+            lower_blue = np.array([90, 40, 40])  # Slightly expanded range
+            upper_blue = np.array([150, 255, 255])  # Slightly expanded range
             blue_mask = cv2.inRange(hsv_roi, lower_blue, upper_blue)
             
             # Define masks for button regions (left, middle, right)
             third_width = roi_w // 3
             
-            left_mask = np.zeros_like(red_mask)
+            left_mask = np.zeros_like(blue_mask)
             left_mask[:, :third_width] = 255
             
-            middle_mask = np.zeros_like(red_mask)
+            middle_mask = np.zeros_like(blue_mask)
             middle_mask[:, third_width:2*third_width] = 255
             
-            right_mask = np.zeros_like(red_mask)
+            right_mask = np.zeros_like(blue_mask)
             right_mask[:, 2*third_width:] = 255
             
-            # Find active buttons in each region and by color
-            # Left region (typically fold)
-            left_red = cv2.bitwise_and(red_mask, left_mask)
-            if cv2.countNonZero(left_red) > 50:
+            # Find active buttons in each region using only blue color
+            # Left button (typically fold)
+            left_blue = cv2.bitwise_and(blue_mask, left_mask)
+            if cv2.countNonZero(left_blue) > 50:
                 available_actions.append("fold")
             
-            # Middle region (typically check/call)
-            middle_green = cv2.bitwise_and(green_mask, middle_mask)
-            if cv2.countNonZero(middle_green) > 50:
+            # Middle button (typically check/call)
+            middle_blue = cv2.bitwise_and(blue_mask, middle_mask)
+            if cv2.countNonZero(middle_blue) > 50:
                 # Try to determine if it's check or call using OCR
                 # Crop the middle section
                 middle_roi = roi[:, third_width:2*third_width]
@@ -1664,7 +1787,7 @@ class GameStateDetector:
                     available_actions.append("check")
                     available_actions.append("call")
             
-            # Right region (typically bet/raise)
+            # Right button (typically bet/raise)
             right_blue = cv2.bitwise_and(blue_mask, right_mask)
             if cv2.countNonZero(right_blue) > 50:
                 # Try to determine if it's bet or raise

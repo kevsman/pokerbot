@@ -311,6 +311,36 @@ class DecisionMaker:
         Returns:
             Decision: A safe default decision
         """
+        # Consider position even when we don't know our cards
+        position_factor = 0.0
+        if game_state.position == "late" or game_state.position == "button":
+            position_factor = 0.3  # More aggressive in late position
+        elif game_state.position == "middle":
+            position_factor = 0.15
+            
+        # Consider pot size
+        pot_factor = min(0.2, game_state.pot_size / 10.0)
+        
+        # Random factor to prevent being too predictable
+        random_factor = random.uniform(0, 0.2)
+        
+        # Aggregate decision factor
+        decision_factor = position_factor + pot_factor + random_factor
+        
+        # Make a more strategic default decision based on position and randomness
+        if decision_factor > 0.5 and Decision.ACTION_BET in game_state.available_actions:
+            # Small bet when we're in good position and feeling aggressive
+            bet_amount = game_state.pot_size * 0.5  # Half pot bet
+            bet_amount = min(bet_amount, game_state.player_stack * 0.1)  # Max 10% of stack
+            logger.info(f"Making default bet from good position: {bet_amount:.2f}")
+            return Decision(Decision.ACTION_BET, round(bet_amount, 2))
+            
+        if decision_factor > 0.3 and Decision.ACTION_CALL in game_state.available_actions:
+            # Call small bets in good position
+            if game_state.current_bet <= game_state.player_stack * 0.05:  # Only call if bet is small
+                logger.info("Making default call from decent position")
+                return Decision(Decision.ACTION_CALL)
+                
         if Decision.ACTION_CHECK in game_state.available_actions:
             return Decision(Decision.ACTION_CHECK)
         elif Decision.ACTION_FOLD in game_state.available_actions:

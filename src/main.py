@@ -42,6 +42,10 @@ class PokerBot:
         self.running = False
         logger.info("Poker Bot initialized")
         
+        # Log the debug mode setting
+        if self.config.get('concise_logging', False):
+            logger.info("Running in concise logging mode (no debug images)")
+        
     def calibrate(self):
         """Calibrate the poker bot before starting."""
         logger.info("Starting poker bot calibration")
@@ -96,8 +100,17 @@ class PokerBot:
                 # Step 4: Make decision based on hand and game state
                 decision = self.decision_maker.decide(game_state, hand_strength)
                 
-                # Step 5: Place bet or take action
-                self.bet_placer.execute_action(decision)
+                # Step 5: Place bet or take action - now passing is_our_turn flag
+                self.bet_placer.execute_action(decision, game_state.is_our_turn)
+                
+                # Enhanced concise logging when in concise mode
+                if self.config.get('concise_logging', False) and game_state.is_our_turn:
+                    player_cards = ', '.join(str(card) for card in game_state.player_cards)
+                    community_cards = ', '.join(str(card) for card in game_state.community_cards)
+                    logger.info(f"CONCISE LOG: Player cards: [{player_cards}] | "
+                               f"Community cards: [{community_cards}] | "
+                               f"Hand: {hand_strength['hand_type']} | "
+                               f"Decision: {decision}")
                 
                 # Wait before next cycle
                 time.sleep(self.config.get('cycle_delay', 1))
@@ -132,6 +145,10 @@ def main():
     parser.add_argument('--force-templates', action='store_true', 
                         help='Force using template matching even if window detection is available')
     
+    # Add new argument for concise logging mode
+    parser.add_argument('--concise-logging', action='store_true',
+                        help='Enable concise logging (only log cards, hand rank and decisions; no debug images)')
+    
     args = parser.parse_args()
     
     # Create configuration
@@ -143,6 +160,9 @@ def main():
         # Add window detection settings
         'use_window_detection': args.use_window_detection and not args.force_templates,
         'window_title': args.window_title,
+        
+        # Add concise logging setting
+        'concise_logging': args.concise_logging,
     }
     
     # Initialize and start the bot
