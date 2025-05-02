@@ -14,12 +14,13 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-# Import the new GameDetector class
+# Import the new detector classes
 from game_detector import GameDetector
-# Import the new PlayerCardDetector class
 from player_card_detector import PlayerCardDetector
-# Import the new CommunityCardDetector class
 from community_card_detector import CommunityCardDetector
+from pot_detector import PotDetector
+from bet_detector import BetDetector
+from stack_detector import StackDetector
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,15 @@ class GameStateDetector:
             debug_mode=self.debug_mode
         )
         
+        # Initialize the pot detector
+        self.pot_detector = PotDetector(config, debug_mode=self.debug_mode)
+        
+        # Initialize the bet detector
+        self.bet_detector = BetDetector(config, debug_mode=self.debug_mode)
+        
+        # Initialize the stack detector
+        self.stack_detector = StackDetector(config, debug_mode=self.debug_mode)
+        
         logger.info("Game state detector initialized")
         if self.debug_mode:
             logger.info("Debug mode is enabled - will save debug images")
@@ -132,14 +142,14 @@ class GameStateDetector:
                 # Detect community cards using the new detector
                 game_state.community_cards = self.community_card_detector.detect_community_cards(screenshot)
                 
-                # Detect pot size
-                game_state.pot_size = self._detect_pot_size(screenshot)
+                # Detect pot size with the new detector
+                game_state.pot_size = self.pot_detector.detect_pot_size(screenshot)
                 
-                # Detect current bet
-                game_state.current_bet = self._detect_current_bet(screenshot)
+                # Detect current bet with the new detector
+                game_state.current_bet = self.bet_detector.detect_current_bet(screenshot)
                 
-                # Detect player stack
-                game_state.player_stack = self._detect_player_stack(screenshot)
+                # Detect player stack with the new detector
+                game_state.player_stack = self.stack_detector.detect_player_stack(screenshot)
                 
                 # Detect position
                 game_state.position = self._detect_position(screenshot)
@@ -161,342 +171,6 @@ class GameStateDetector:
         except Exception as e:
             logger.exception(f"Error detecting game state: {e}")
             return GameState()
-            
-    def _detect_pot_size(self, screenshot):
-        """
-        Detect the current pot size from the screenshot using OCR.
-        
-        Args:
-            screenshot (numpy.ndarray): The screenshot to analyze.
-            
-        Returns:
-            float: The detected pot size.
-        """
-        try:
-            h, w = screenshot.shape[:2]
-            
-            # Define region where pot size is typically displayed (center-top of the table)
-            #For bærbar
-            # roi_x = int(w * 0.4)
-            # roi_y = int(h * 0.3)
-            # roi_w = int(w * 0.2)
-            # roi_h = int(h * 0.08)
-
-            #For stasjonær
-            roi_x = int(w * 0.22)
-            roi_y = int(h * 0.36)
-            roi_w = int(w * 0.07)
-            roi_h = int(h * 0.05)
-            
-            # Add debugging info
-            logger.info(f"[POT DEBUG] Screenshot size: {w}x{h}")
-            logger.info(f"[POT DEBUG] Pot size ROI: x={roi_x}, y={roi_y}, width={roi_w}, height={roi_h}")
-            
-            # Create a debug image for visualization
-            debug_img = screenshot.copy()
-            
-            # Draw a rectangle around the ROI we're analyzing
-            cv2.rectangle(debug_img, (roi_x, roi_y), (roi_x + roi_w, roi_y + roi_h), (0, 255, 0), 2)
-            
-            # Draw crosshairs at the center of the ROI
-            center_x = roi_x + roi_w // 2
-            center_y = roi_y + roi_h // 2
-            cv2.line(debug_img, (center_x - 20, center_y), (center_x + 20, center_y), (0, 0, 255), 2)
-            cv2.line(debug_img, (center_x, center_y - 20), (center_x, center_y + 20), (0, 0, 255), 2)
-            
-            # Draw coordinate text
-            cv2.putText(debug_img, f"ROI: ({roi_x},{roi_y})", (roi_x, roi_y - 10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-            
-            # Extract the region of interest
-            roi = screenshot[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
-            
-            # Preprocess the image for better OCR
-            preprocessed = self._preprocess_for_ocr(roi)
-            
-            # Use OCR to extract text
-            text = pytesseract.image_to_string(
-                preprocessed,
-                config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789.,$'
-            )
-            
-            logger.info(f"[POT DEBUG] Raw OCR text: '{text}'")
-            
-            # Clean and parse the text
-            pot_size = self._parse_money_value(text)
-            
-            # Save both the original ROI and the preprocessed version
-            debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
-            os.makedirs(debug_dir, exist_ok=True)
-            
-            timestamp = int(time.time())
-            original_path = os.path.join(debug_dir, f'pot_roi_{timestamp}.png')
-            preprocessed_path = os.path.join(debug_dir, f'pot_preprocessed_{timestamp}.png')
-            debug_path = os.path.join(debug_dir, f'pot_debug_{timestamp}.png')
-            
-            cv2.imwrite(original_path, roi)
-            cv2.imwrite(preprocessed_path, preprocessed)
-            logger.info(f"[POT DEBUG] Saved original ROI to {original_path}")
-            logger.info(f"[POT DEBUG] Saved preprocessed image to {preprocessed_path}")
-            
-            # Add OCR results to the debug image
-            cv2.rectangle(debug_img, (10, 10), (350, 80), (0, 0, 0), -1)  # Black background for text
-            cv2.putText(debug_img, f"OCR Text: '{text}'", (20, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-            cv2.putText(debug_img, f"Parsed Value: ${pot_size:.2f}", (20, 60), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
-            
-            # Save the full debug image
-            cv2.imwrite(debug_path, debug_img)
-            logger.info(f"[POT DEBUG] Saved debug image to {debug_path}")
-            
-            if pot_size > 0:
-                logger.info(f"[POT DEBUG] Detected pot size: ${pot_size:.2f}")
-                return pot_size
-            else:
-                logger.info("[POT DEBUG] No pot size detected or pot size is zero")
-                return 0.0
-                
-        except Exception as e:
-            logger.exception(f"Error detecting pot size: {e}")
-            return 0.0
-            
-    def _parse_money_value(self, text):
-        """
-        Parse a text string to extract a monetary value.
-        
-        Args:
-            text (str): Text to parse.
-            
-        Returns:
-            float: Extracted monetary value.
-        """
-        if not text:
-            return 0.0
-            
-        # Remove non-numeric characters except decimal point
-        # First, check if there's a specific pattern like "Pot: $123.45"
-        import re
-        
-        # Look for patterns like "pot: $123.45" or "$123.45"
-        pot_pattern = re.search(r'(?:pot:?\s*)?[$]?(\d+(?:\.\d+)?)', text.lower())
-        if pot_pattern:
-            try:
-                return float(pot_pattern.group(1))
-            except ValueError:
-                pass
-        
-        # If no pattern matched, try to extract any number
-        digits_only = ''.join(c for c in text if c.isdigit() or c == '.')
-        
-        # Handle multiple decimal points
-        parts = digits_only.split('.')
-        if len(parts) > 2:
-            # Keep only the first decimal point
-            digits_only = parts[0] + '.' + ''.join(parts[1:]).replace('.', '')
-        
-        try:
-            return float(digits_only) if digits_only else 0.0
-        except ValueError:
-            return 0.0
-            
-    def _detect_current_bet(self, screenshot):
-        """
-        Detect the current bet amount from the screenshot using OCR.
-        
-        Args:
-            screenshot (numpy.ndarray): The screenshot to analyze.
-            
-        Returns:
-            float: The detected current bet amount.
-        """
-        try:
-            h, w = screenshot.shape[:2]
-            
-            # Define region where the current bet is typically displayed
-            # Usually in the center-bottom area of the table
-            # Bærbar
-            # roi_x = int(w * 0.4)
-            # roi_y = int(h * 0.55)
-            # roi_w = int(w * 0.2)
-            # roi_h = int(h * 0.05)
-
-            # Stasjonær
-            roi_x = int(w * 0.22)  # Start at 40% from the left
-            roi_y = int(h * 0.55)  # Start at 60% from the top
-            roi_w = int(w * 0.06)  # Width is 20% of the screen width
-            roi_h = int(h * 0.05)  # Height is 15% of the screen height
-            
-            # Add debugging info
-            logger.info(f"[BET DEBUG] Screenshot size: {w}x{h}")
-            logger.info(f"[BET DEBUG] Current bet ROI: x={roi_x}, y={roi_y}, width={roi_w}, height={roi_h}")
-            
-            # Create a debug image for visualization
-            debug_img = screenshot.copy()
-            
-            # Draw a rectangle around the ROI we're analyzing
-            cv2.rectangle(debug_img, (roi_x, roi_y), (roi_x + roi_w, roi_y + roi_h), (0, 255, 0), 2)
-            
-            # Draw crosshairs at the center of the ROI
-            center_x = roi_x + roi_w // 2
-            center_y = roi_y + roi_h // 2
-            cv2.line(debug_img, (center_x - 20, center_y), (center_x + 20, center_y), (0, 0, 255), 2)
-            cv2.line(debug_img, (center_x, center_y - 20), (center_x, center_y + 20), (0, 0, 255), 2)
-            
-            # Draw coordinate text
-            cv2.putText(debug_img, f"ROI: ({roi_x},{roi_y})", (roi_x, roi_y - 10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-            
-            # Extract the region of interest
-            roi = screenshot[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
-            
-            # Preprocess the image for better OCR
-            preprocessed = self._preprocess_for_ocr(roi)
-            
-            # Use OCR to extract text
-            text = pytesseract.image_to_string(
-                preprocessed,
-                config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789.,$'
-            )
-            
-            logger.info(f"[BET DEBUG] Raw OCR text: '{text}'")
-            
-            # Parse the bet amount
-            bet_amount = self._parse_money_value(text)
-            
-            # Always save debug images to track detection quality
-            debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
-            os.makedirs(debug_dir, exist_ok=True)
-            
-            timestamp = int(time.time())
-            original_path = os.path.join(debug_dir, f'current_bet_roi_{timestamp}.png')
-            preprocessed_path = os.path.join(debug_dir, f'current_bet_preprocessed_{timestamp}.png')
-            debug_path = os.path.join(debug_dir, f'current_bet_debug_{timestamp}.png')
-            
-            cv2.imwrite(original_path, roi)
-            cv2.imwrite(preprocessed_path, preprocessed)
-            
-            # Add OCR results to the debug image
-            cv2.rectangle(debug_img, (10, 10), (350, 80), (0, 0, 0), -1)  # Black background for text
-            cv2.putText(debug_img, f"OCR Text: '{text}'", (20, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-            cv2.putText(debug_img, f"Parsed Value: ${bet_amount:.2f}", (20, 60), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
-            
-            # Save the full debug image
-            cv2.imwrite(debug_path, debug_img)
-            logger.info(f"[BET DEBUG] Saved debug images to {debug_dir}")
-            
-            if bet_amount > 0:
-                logger.info(f"[BET DEBUG] Detected current bet: ${bet_amount:.2f}")
-                return bet_amount
-            else:
-                logger.debug("[BET DEBUG] No current bet detected or bet is zero")
-                return 0.0
-                
-        except Exception as e:
-            logger.exception(f"Error detecting current bet: {e}")
-            return 0.0
-            
-    def _detect_player_stack(self, screenshot):
-        """
-        Detect the player's chip stack from the screenshot using OCR.
-        
-        Args:
-            screenshot (numpy.ndarray): The screenshot to analyze.
-            
-        Returns:
-            float: The detected player stack amount.
-        """
-        try:
-            h, w = screenshot.shape[:2]
-            
-            # Define region where player stack is typically displayed
-            # Usually near the bottom of the screen, in front of the player
-            # Bærbar
-            # roi_x = int(w * 0.45)
-            # roi_y = int(h * 0.8)
-            # roi_w = int(w * 0.1)
-            # roi_h = int(h * 0.05)
-            
-            # Stasjonær
-            roi_x = int(w * 0.22)  # Start at 40% from the left
-            roi_y = int(h * 0.70)  # Start at 60% from the top
-            roi_w = int(w * 0.06)  # Width is 20% of the screen width
-            roi_h = int(h * 0.025)  # Height is 15% of the screen height
-            
-            # Add debugging info
-            logger.info(f"[STACK DEBUG] Screenshot size: {w}x{h}")
-            logger.info(f"[STACK DEBUG] Player stack ROI: x={roi_x}, y={roi_y}, width={roi_w}, height={roi_h}")
-            
-            # Create a debug image for visualization
-            debug_img = screenshot.copy()
-            
-            # Draw a rectangle around the ROI we're analyzing
-            cv2.rectangle(debug_img, (roi_x, roi_y), (roi_x + roi_w, roi_y + roi_h), (0, 255, 0), 2)
-            
-            # Draw crosshairs at the center of the ROI
-            center_x = roi_x + roi_w // 2
-            center_y = roi_y + roi_h // 2
-            cv2.line(debug_img, (center_x - 20, center_y), (center_x + 20, center_y), (0, 0, 255), 2)
-            cv2.line(debug_img, (center_x, center_y - 20), (center_x, center_y + 20), (0, 0, 255), 2)
-            
-            # Draw coordinate text
-            cv2.putText(debug_img, f"ROI: ({roi_x},{roi_y})", (roi_x, roi_y - 10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-            
-            # Extract the region of interest
-            roi = screenshot[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
-            
-            # Preprocess the image for better OCR
-            preprocessed = self._preprocess_for_ocr(roi)
-            
-            # Use OCR to extract text
-            text = pytesseract.image_to_string(
-                preprocessed,
-                config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789.,$'
-            )
-            
-            logger.info(f"[STACK DEBUG] Raw OCR text: '{text}'")
-            
-            # Parse the stack amount
-            stack_amount = self._parse_money_value(text)
-            
-            # Always save debug images to track detection quality
-            debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
-            os.makedirs(debug_dir, exist_ok=True)
-            
-            timestamp = int(time.time())
-            original_path = os.path.join(debug_dir, f'player_stack_roi_{timestamp}.png')
-            preprocessed_path = os.path.join(debug_dir, f'player_stack_preprocessed_{timestamp}.png')
-            debug_path = os.path.join(debug_dir, f'player_stack_debug_{timestamp}.png')
-            
-            cv2.imwrite(original_path, roi)
-            cv2.imwrite(preprocessed_path, preprocessed)
-            
-            # Add OCR results to the debug image
-            cv2.rectangle(debug_img, (10, 10), (350, 80), (0, 0, 0), -1)  # Black background for text
-            cv2.putText(debug_img, f"OCR Text: '{text}'", (20, 30), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-            cv2.putText(debug_img, f"Parsed Value: ${stack_amount:.2f}", (20, 60), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
-            
-            # Save the full debug image
-            cv2.imwrite(debug_path, debug_img)
-            logger.info(f"[STACK DEBUG] Saved debug images to {debug_dir}")
-            
-            # If no stack was detected or the value is unreasonably small,
-            # use a default value (this should be configured)
-            if stack_amount <= 0:
-                logger.debug("[STACK DEBUG] Could not detect player stack, using default value")
-                return self.config.get('default_stack', 100.0)
-                
-            logger.info(f"[STACK DEBUG] Detected player stack: ${stack_amount:.2f}")
-            return stack_amount
-                
-        except Exception as e:
-            logger.exception(f"Error detecting player stack: {e}")
-            return self.config.get('default_stack', 100.0)
         
     def _detect_position(self, screenshot):
         """
@@ -526,12 +200,6 @@ class GameStateDetector:
             
             # Define region where action buttons are typically located
             # Usually at the bottom of the screen
-
-            # For bærbar
-            # roi_x = int(w * 0.3)
-            # roi_y = int(h * 0.8)
-            # roi_w = int(w * 0.4)
-            # roi_h = int(h * 0.15)            
             
             # For stasjonær
             roi_x = int(w * 0.3)
@@ -697,13 +365,7 @@ class GameStateDetector:
         try:
             h, w = screenshot.shape[:2]
             
-            # Define the region where action buttons are typically located
-            # For bærbar
-            # roi_x = int(w * 0.3)
-            # roi_y = int(h * 0.8)
-            # roi_w = int(w * 0.4)
-            # roi_h = int(h * 0.15)            
-            
+            # Define the region where action buttons are typically located           
             # For stasjonær
             roi_x = int(w * 0.3)
             roi_y = int(h * 0.81)
@@ -906,7 +568,7 @@ class GameStateDetector:
             available_actions = ["fold", "check", "bet"]
             
         return available_actions
-        
+    
     def _preprocess_for_ocr(self, img):
         """Preprocess image for better OCR results."""
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
