@@ -15,6 +15,9 @@ class CardIdentifier:
     def __init__(self, debug_mode=True):
         """Initialize the card identifier"""
         self.debug_mode = debug_mode
+        # Set tesseract path explicitly if it's not in PATH
+        # Uncomment and set if needed
+        # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
         
     def identify_card(self, card_img):
         """
@@ -48,21 +51,21 @@ class CardIdentifier:
             # Convert to multiple color spaces for better analysis
             hsv_corner = cv2.cvtColor(corner, cv2.COLOR_BGR2HSV)
             
-            # Red detection (for hearts and diamonds) with improved thresholds
+            # Improved red detection (for hearts and diamonds) with wider thresholds
             # In HSV, red is at both ends of the hue spectrum
-            lower_red1 = np.array([0, 100, 100])
-            upper_red1 = np.array([10, 255, 255])
-            lower_red2 = np.array([160, 100, 100]) 
+            lower_red1 = np.array([0, 70, 70])     # Lowered saturation and value thresholds
+            upper_red1 = np.array([15, 255, 255])  # Increased hue range to catch more red variations
+            lower_red2 = np.array([160, 70, 70])   # Lowered saturation and value thresholds
             upper_red2 = np.array([180, 255, 255])
             
             red_mask1 = cv2.inRange(hsv_corner, lower_red1, upper_red1)
             red_mask2 = cv2.inRange(hsv_corner, lower_red2, upper_red2)
             red_mask = cv2.bitwise_or(red_mask1, red_mask2)
             
-            # Black detection (for clubs and spades) with improved thresholds
+            # Improved black detection (for clubs and spades) with adjusted thresholds
             # In HSV, black has low V (value/brightness)
             lower_black = np.array([0, 0, 0])
-            upper_black = np.array([180, 100, 70])
+            upper_black = np.array([180, 150, 100])  # Increased saturation and value thresholds
             black_mask = cv2.inRange(hsv_corner, lower_black, upper_black)
             
             # Count red and black pixels
@@ -76,67 +79,126 @@ class CardIdentifier:
                 cv2.imwrite(os.path.join(debug_dir, f'black_mask_{int(time.time())}.png'), black_mask)
                 logger.info(f"[CARD DEBUG] Red pixels: {red_pixels}, Black pixels: {black_pixels}")
             
-            # Determine if card is red or black
-            is_red = red_pixels > black_pixels and red_pixels > 10
+            # Determine if card is red or black with improved comparison
+            # Added pixel density threshold relative to the image size
+            total_pixels = corner.shape[0] * corner.shape[1]
+            min_pixel_threshold = max(10, total_pixels * 0.05)  # At least 5% of pixels or 10 pixels
+            is_red = red_pixels > black_pixels and red_pixels > min_pixel_threshold
             
-            # Enhanced OCR for rank detection
-            # Convert to grayscale with better contrast
+            # Enhanced OCR for rank detection with multiple preprocessing approaches
+            # Try multiple preprocessing methods and choose the best result
+            ocr_results = []
+            confidence_scores = []
+            
+            # Original method
             gray = cv2.cvtColor(corner, cv2.COLOR_BGR2GRAY)
-            
-            # Apply adaptive threshold for better text extraction
             thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
                                           cv2.THRESH_BINARY_INV, 11, 2)
+            
+            # Additional preprocessing - try different thresholds
+            _, binary1 = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
+            _, binary2 = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY_INV)
+            
+            # Add contrast enhancement
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(2,2))
+            enhanced = clahe.apply(gray)
+            _, binary3 = cv2.threshold(enhanced, 127, 255, cv2.THRESH_BINARY_INV)
             
             # Dilate to connect broken parts of characters
             kernel = np.ones((2,2), np.uint8)
             thresh = cv2.dilate(thresh, kernel, iterations=1)
+            binary1 = cv2.dilate(binary1, kernel, iterations=1)
+            binary2 = cv2.dilate(binary2, kernel, iterations=1)
+            binary3 = cv2.dilate(binary3, kernel, iterations=1)
             
             # Save thresholded image for debugging
             if self.debug_mode:
                 debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'debug')
                 cv2.imwrite(os.path.join(debug_dir, f'rank_thresh_{int(time.time())}.png'), thresh)
+                cv2.imwrite(os.path.join(debug_dir, f'rank_binary1_{int(time.time())}.png'), binary1)
+                cv2.imwrite(os.path.join(debug_dir, f'rank_binary2_{int(time.time())}.png'), binary2)
+                cv2.imwrite(os.path.join(debug_dir, f'rank_binary3_{int(time.time())}.png'), binary3)
             
             # Use tesseract with specific configurations for card rank detection
-            # Use --psm 8 for single character recognition and an improved whitelist
-            rank_config = r'--psm 8 -c tessedit_char_whitelist=23456789TJQKA10'
-            detected_text = pytesseract.image_to_string(thresh, config=rank_config).strip()
+            # Try multiple PSM modes for better results
             
-            # Improved mapping of OCR results to card ranks
+            # PSM 8 - Single word
+            rank_config1 = r'--psm 8 -c tessedit_char_whitelist=23456789TJQKA10 --oem 3'
+            # PSM 10 - Single character
+            rank_config2 = r'--psm 10 -c tessedit_char_whitelist=23456789TJQKA10 --oem 3'
+            # PSM 6 - Single block of text
+            rank_config3 = r'--psm 6 -c tessedit_char_whitelist=23456789TJQKA10 --oem 3'
+            
+            # Try all combinations of image preprocessing and OCR configs
+            for img, name in [(thresh, 'thresh'), (binary1, 'binary1'), (binary2, 'binary2'), (binary3, 'binary3')]:
+                for config, config_name in [(rank_config1, 'config1'), (rank_config2, 'config2'), (rank_config3, 'config3')]:
+                    try:
+                        data = pytesseract.image_to_data(img, config=config, output_type=pytesseract.Output.DICT)
+                        if len(data['text']) > 0 and len(data['conf']) > 0:
+                            # Filter out empty results
+                            valid_indices = [i for i, txt in enumerate(data['text']) if txt.strip()]
+                            if valid_indices:
+                                text = data['text'][valid_indices[0]].strip()
+                                conf = float(data['conf'][valid_indices[0]])
+                                if text and conf > 0:  # Only add non-empty results with positive confidence
+                                    ocr_results.append(text)
+                                    confidence_scores.append(conf)
+                                    if self.debug_mode:
+                                        logger.info(f"[CARD DEBUG] OCR {name}+{config_name}: '{text}' (conf: {conf})")
+                    except Exception as e:
+                        logger.debug(f"OCR error with {name}+{config_name}: {e}")
+            
+            # Improved mapping of OCR results to card ranks with more common misidentifications
             rank_map = {
                 '2': '2', '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', 
                 '8': '8', '9': '9', '1': '10', 'T': '10', 'J': 'J', 
                 'Q': 'Q', 'K': 'K', 'A': 'A', 'l': '1', 'I': '1',
                 'O': '10', 'o': '10', '0': '10', 'L': 'J', 'Z': '2',
                 't': '10', 'i': '1', '!': '1', '[': 'J', ']': 'J',
-                # Added common misidentifications
                 'S': '5', 'B': '8', 'G': '6', 'g': '9',
-                'U': 'J', 'V': 'A', 'Y': 'A'
+                'U': 'J', 'V': 'A', 'Y': 'A', 'W': 'M',
+                'P': 'F', 'F': 'P', 'D': '0', 'H': '4',
+                'R': 'K', 'X': 'K', 'N': '7', 'M': 'W',
+                'C': '0', 'E': '3', '?': '2', '#': '4',
+                '*': 'A', '+': 'A', '<': 'K', '>': 'K'
             }
             
-            # Process OCR text for rank
+            # Process OCR text for rank with improved logic
             rank = None
-            logger.info(f"[CARD DEBUG] Raw OCR text: '{detected_text}'")
+            best_confidence = -1
+            detected_text = ""
             
-            # Clean up OCR results
-            detected_text = ''.join(c for c in detected_text if c.isalnum())
+            # If we have OCR results, use the one with highest confidence
+            if ocr_results and confidence_scores:
+                best_idx = np.argmax(confidence_scores)
+                detected_text = ocr_results[best_idx]
+                best_confidence = confidence_scores[best_idx]
             
-            # If we found something like '10' directly
-            if detected_text in ['10', '1O', 'IO', 'To', 'T0']:
-                rank = '10'
-            else:
-                # Try to match the first character to a rank
-                if detected_text and detected_text[0] in rank_map:
-                    rank = rank_map[detected_text[0]]
+            if detected_text:
+                logger.info(f"[CARD DEBUG] Best OCR text: '{detected_text}' (confidence: {best_confidence})")
                 
-                # Special case for 10
-                if detected_text and len(detected_text) > 1:
-                    if detected_text[:2] in ['10', '1O', 'IO', 'To', 'T0']:
-                        rank = '10'
+                # Clean up OCR results
+                detected_text = ''.join(c for c in detected_text if c.isalnum())
+                
+                # If we found something like '10' directly or its variations
+                if detected_text in ['10', '1O', 'IO', 'To', 'T0', 'TO', 'TQ', 'I0', 'TD', '1D', 'TP', '1P']:
+                    rank = '10'
+                else:
+                    # Try to match the first character to a rank
+                    if detected_text and detected_text[0] in rank_map:
+                        rank = rank_map[detected_text[0]]
+                    
+                    # Special case for 10, check if any 2-character substring matches
+                    if detected_text and len(detected_text) > 1:
+                        for i in range(len(detected_text) - 1):
+                            if detected_text[i:i+2] in ['10', '1O', 'IO', 'To', 'T0', 'TO', 'TQ', 'I0', 'TD', '1D', 'TP', '1P']:
+                                rank = '10'
+                                break
             
-            # If OCR failed, try an alternative approach with shape analysis
-            if not rank and corner_h > 10 and corner_w > 10:
+            # If OCR failed or had low confidence, try shape analysis methods
+            if not rank or best_confidence < 40:  # Only rely on OCR if confidence is good
                 # Focus on the very top-left where rank is typically located
-                rank_roi = corner[0:min(20, corner_h), 0:min(20, corner_w)]
+                rank_roi = corner[0:min(25, corner_h), 0:min(25, corner_w)]
                 
                 # Try multiple shape detection methods
                 if self._check_for_A_shape(rank_roi):
@@ -150,11 +212,11 @@ class CardIdentifier:
                 elif self._check_for_9_shape(rank_roi):
                     rank = '9'
             
-            # Use a pattern-based approach as a last resort
-            if not rank:
-                rank = self._rank_by_pattern_matching(thresh)
+                # Use a pattern-based approach as a last resort
+                if not rank:
+                    rank = self._rank_by_pattern_matching(thresh)
             
-            # Determine suit based on shape analysis, not just color
+            # Determine suit based on improved shape analysis
             suit = None
             
             # For red cards (hearts and diamonds)
@@ -209,6 +271,14 @@ class CardIdentifier:
                     # If contour analysis fails, default to spade as it's more common
                     suit = 's'
             
+            # Try a second approach for suits if the first wasn't definitive
+            if suit and (heart_score < 10 and diamond_score < 10) or (spade_score < 10 and club_score < 10):
+                # Try to use shape detection directly on the corner image
+                suit_region = corner[corner_h//3:, :]  # Focus on the lower part of the corner for suit
+                suit2 = self._detect_suit_by_template(suit_region, is_red)
+                if suit2:
+                    suit = suit2
+            
             # If we couldn't detect either rank or suit, return None
             if not rank or not suit:
                 logger.info(f"[CARD DEBUG] Failed to identify card: rank={rank}, suit={suit}")
@@ -220,6 +290,60 @@ class CardIdentifier:
         except Exception as e:
             logger.exception(f"Error identifying card: {e}")
             return None, None
+            
+    def _detect_suit_by_template(self, img, is_red):
+        """Try to detect the suit using template-based approach"""
+        # Convert to grayscale
+        if len(img.shape) == 3:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = img.copy()
+        
+        # Create binary image
+        _, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
+        
+        # Find contours
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Skip if no significant contours found
+        if not contours:
+            return None
+            
+        # Get the largest contour
+        largest_contour = max(contours, key=cv2.contourArea)
+        
+        # Skip if contour is too small
+        if cv2.contourArea(largest_contour) < 10:
+            return None
+            
+        # Calculate shape features
+        x, y, w, h = cv2.boundingRect(largest_contour)
+        aspect_ratio = float(w)/h if h > 0 else 0
+        area = cv2.contourArea(largest_contour)
+        hull = cv2.convexHull(largest_contour)
+        hull_area = cv2.contourArea(hull)
+        solidity = float(area)/hull_area if hull_area > 0 else 0
+        
+        # Analyze shape characteristics
+        if is_red:
+            # For red suits: heart vs diamond
+            if aspect_ratio < 0.9:  # Hearts are typically taller than wide
+                if solidity < 0.8:  # Hearts have concavity at the top
+                    return 'h'
+                else:
+                    return 'd'  # Diamonds tend to be more solid
+            else:
+                return 'd'  # Diamond is more likely for wider shapes
+        else:
+            # For black suits: club vs spade
+            if solidity > 0.7:
+                # Clubs tend to be more solid/compact
+                return 'c'
+            else:
+                # Spades tend to have a triangular shape
+                return 's'
+                
+        return None
             
     def _rank_by_pattern_matching(self, img):
         """Try to identify a card rank by its pattern of white pixels."""
