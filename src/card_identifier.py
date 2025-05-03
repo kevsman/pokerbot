@@ -219,6 +219,12 @@ class CardIdentifier:
             # Determine suit based on improved shape analysis
             suit = None
             
+            # Initialize scores to zero to prevent unbounded local variable errors
+            heart_score = 0
+            diamond_score = 0
+            spade_score = 0
+            club_score = 0
+            
             # For red cards (hearts and diamonds)
             if is_red:
                 # Apply morphological operations to better detect shape features
