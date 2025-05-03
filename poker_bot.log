@@ -2837,3 +2837,39 @@
 2025-05-02 18:06:25,863 - game_state - INFO - [CARD DEBUG] Total card-like contours found: 0
 2025-05-02 18:06:25,949 - __main__ - INFO - Poker Bot stopped by user
 2025-05-02 18:06:25,951 - __main__ - INFO - Poker Bot stopped
+2025-05-03 07:20:43,011 - screen_capture - INFO - Screen capture initialized
+2025-05-03 07:20:43,047 - game_detector - INFO - Loaded client template 1 from resources
+2025-05-03 07:20:43,080 - game_detector - INFO - Loaded client template 2 from resources
+2025-05-03 07:20:43,107 - game_detector - INFO - Loaded client template 3 from resources
+2025-05-03 07:20:43,130 - game_detector - INFO - Loaded client template 4 from resources
+2025-05-03 07:20:43,153 - game_detector - INFO - Loaded client template 5 from resources
+2025-05-03 07:20:43,153 - game_detector - INFO - Loaded 5 client templates
+2025-05-03 07:20:43,153 - game_detector - INFO - Template client1 size: 1536x960
+2025-05-03 07:20:43,154 - game_detector - INFO - Template client2 size: 1536x960
+2025-05-03 07:20:43,154 - game_detector - INFO - Template client3 size: 1536x960
+2025-05-03 07:20:43,154 - game_detector - INFO - Template client4 size: 1536x960
+2025-05-03 07:20:43,154 - game_detector - INFO - Template client5 size: 1536x960
+2025-05-03 07:20:43,155 - game_detector - INFO - Game detector initialized
+2025-05-03 07:20:43,155 - game_detector - INFO - Window title detection is enabled
+2025-05-03 07:20:43,155 - game_detector - INFO - Debug mode is disabled - will not save debug images
+2025-05-03 07:20:43,162 - pot_detector - INFO - Pot detector initialized
+2025-05-03 07:20:43,162 - bet_detector - INFO - Bet detector initialized
+2025-05-03 07:20:43,162 - stack_detector - INFO - Stack detector initialized
+2025-05-03 07:20:43,163 - game_state - INFO - Game state detector initialized
+2025-05-03 07:20:43,163 - game_state - INFO - Debug mode is disabled - will not save debug images
+2025-05-03 07:20:43,163 - hand_analyzer - INFO - Hand analyzer initialized
+2025-05-03 07:20:43,163 - decision_maker - INFO - Decision maker initialized (aggression: 0.50, bluff frequency: 0.10)
+2025-05-03 07:20:43,189 - bet_placer - INFO - Loaded client template 1 for button detection
+2025-05-03 07:20:43,214 - bet_placer - INFO - Loaded client template 2 for button detection
+2025-05-03 07:20:43,240 - bet_placer - INFO - Loaded client template 3 for button detection
+2025-05-03 07:20:43,262 - bet_placer - INFO - Loaded client template 4 for button detection
+2025-05-03 07:20:43,289 - bet_placer - INFO - Loaded client template 5 for button detection
+2025-05-03 07:20:43,289 - bet_placer - INFO - Bet placer initialized
+2025-05-03 07:20:43,289 - __main__ - INFO - Poker Bot initialized
+2025-05-03 07:20:43,290 - __main__ - INFO - Running in concise logging mode (no debug images)
+2025-05-03 07:20:43,290 - __main__ - INFO - Starting poker bot calibration
+2025-05-03 07:20:43,290 - bet_placer - INFO - Starting button calibration
+2025-05-03 07:20:43,291 - bet_placer - INFO - Attempting automatic button calibration
+2025-05-03 07:20:43,291 - screen_capture - INFO - Screen capture initialized
+2025-05-03 07:20:45,089 - bet_placer - WARNING - Could not match any client template
+2025-05-03 07:20:45,091 - bet_placer - INFO - Starting interactive button calibration
