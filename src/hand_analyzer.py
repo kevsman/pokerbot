@@ -11,7 +11,8 @@ import random
 from pypokerengine.engine.hand_evaluator import HandEvaluator
 from pypokerengine.utils.card_utils import gen_cards
 from typing import List, Dict, Tuple
-from game_state import Card, GameState
+from models import Card
+from game_state import GameState
 
 logger = logging.getLogger(__name__)
 

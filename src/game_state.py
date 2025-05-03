@@ -13,6 +13,7 @@ import os
 import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
+from models import Card
 
 # Import the detector classes
 from game_detector import GameDetector
@@ -29,16 +30,6 @@ logger = logging.getLogger(__name__)
 
 # Configure pytesseract path - update this with your Tesseract installation path
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-
-
-@dataclass
-class Card:
-    """Class representing a playing card."""
-    rank: str
-    suit: str
-    
-    def __str__(self):
-        return f"{self.rank}{self.suit}"
 
 
 @dataclass

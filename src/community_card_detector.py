@@ -12,7 +12,7 @@ import os
 import time
 from typing import List
 
-from game_state import Card
+from models import Card
 
 logger = logging.getLogger(__name__)
 
